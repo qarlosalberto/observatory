@@ -65,7 +65,7 @@ export function incidentCoords(feature){
  const a=6378137,e2=0.00669437999014,k=0.9996,ep2=e2/(1-e2),e1=(1-Math.sqrt(1-e2))/(1+Math.sqrt(1-e2));
  const m=y/k,mu=m/(a*(1-e2/4-3*e2**2/64-5*e2**3/256));
  const p=mu+(3*e1/2-27*e1**3/32)*Math.sin(2*mu)+(21*e1**2/16-55*e1**4/32)*Math.sin(4*mu)+(151*e1**3/96)*Math.sin(6*mu)+(1097*e1**4/512)*Math.sin(8*mu);
- const sin=Math.sin(p),cos=Math.cos(p),tan=Math.tan(p),n=a/Math.sqrt(1-e2*sin*sin),t=tan*t,c=ep2*cos*cos,r=a*(1-e2)/(1-e2*sin*sin)**1.5,d=(x-500000)/(n*k);
+ const sin=Math.sin(p),cos=Math.cos(p),tan=Math.tan(p),n=a/Math.sqrt(1-e2*sin*sin),t=tan*tan,c=ep2*cos*cos,r=a*(1-e2)/(1-e2*sin*sin)**1.5,d=(x-500000)/(n*k);
  const lat=p-(n*tan/r)*(d*d/2-(5+3*t+10*c-4*c*c-9*ep2)*d**4/24+(61+90*t+298*c+45*t*t-252*ep2-3*c*c)*d**6/720);
  const lon=(-3*Math.PI/180)+(d-(1+2*t+c)*d**3/6+(5-2*c+28*t-3*c*c+8*ep2+24*t*t)*d**5/120)/cos;
  return [lat*180/Math.PI,lon*180/Math.PI];
