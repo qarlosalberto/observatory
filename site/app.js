@@ -8,11 +8,11 @@ function report(){
  const visible=state.map?state.stops.filter(x=>x.id.startsWith('tuzsa-')&&state.map.getBounds().pad(.12).contains(x.coords)):[];
  $('status').textContent=`Bizi: ${state.stations.length} stations${state.bikeSource?' · '+state.bikeSource:''}${state.bikeError?' · '+state.bikeError:''} | Bus: ${visible.filter(x=>x.checked>0).length}/${visible.length} visible stops queried · ${b.withETA} with predictions · ${b.unknown} without predictions · ${b.errors} errors${state.busLoading?' · Loading…':''}${state.busError?' · '+state.busError:''}`;
  $('updated').textContent=new Date().toLocaleTimeString('en-GB');
- const cards=[['Available bikes',s.known?s.available:'—',s.known+'/'+s.total+' stations informan'],['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+'/'+s.total+' stations informan'],['Empty Bizi stations',s.known?s.empty:'—','De las stations con datos'],['Routes with waits >15 min',b.estimates?b.long:'—',b.estimates+' known predictions']];
+ const cards=[['Available bikes',s.known?s.available:'—',s.known+'/'+s.total+' stations reporting'],['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+'/'+s.total+' stations reporting'],['Empty Bizi stations',s.known?s.empty:'—','Among stations with known availability'],['Routes with waits >15 min',b.estimates?b.long:'—',b.estimates+' known predictions']];
  $('kpis').replaceChildren(...cards.map(([label,value,note])=>{const div=document.createElement('article');div.className='kpi';const span=document.createElement('span');span.className='label';span.textContent=label;const strong=document.createElement('strong');strong.textContent=value;const sm=document.createElement('small');sm.textContent=note;div.append(span,strong,sm);return div}));
- $('bikeNote').textContent=s.known?`${s.known} of ${s.total} stations informan; ${s.total-s.known} unknown.`:'No data fiables of disponibilidad.';
- $('faultNote').textContent=s.pairedStations?`Comparación of las mismas ${s.pairedStations} stations con ambos recuentos. ${s.total-s.pairedStations} without comparable data.`:'La fuente no ofrece datos comparables of bicicletas averiadas. Desconocido no significa cero.';
- $('busNote').textContent=`${b.estimates} predicciones por línea of ${b.withETA} stops. ${b.unknown} respuestas without predictions; ${b.errors} errors. No data of horarios programados no se puede hablar of retrasos.`;
+ $('bikeNote').textContent=s.known?`${s.known} of ${s.total} stations report availability; ${s.total-s.known} unknown.`:'No reliable availability data.';
+ $('faultNote').textContent=s.pairedStations?`Comparison across ${s.pairedStations} stations reporting both counts. ${s.total-s.pairedStations} stations have no comparable data.`:'The source does not provide comparable out-of-service bike counts. Unknown does not mean zero.';
+ $('busNote').textContent=`${b.estimates} route-level predictions from ${b.withETA} stops. ${b.unknown} responses without predictions; ${b.errors} API errors. Timetable delays cannot be established without scheduled arrival data.`;
  chart('bikeChart','doughnut',['≥3 available','1–2 available','Empty'],[s.good,s.low,s.empty],[color.green,color.yellow,color.red]);
  chart('faultChart','bar',s.pairedStations?['Available','Out of service']:['No data'],s.pairedStations?[s.pairedAvailable,s.pairedFaults]:[0],s.pairedStations?[color.green,color.yellow]:[color.grey]);
  chart('busChart','bar',['0–5 min','6–15 min','>15 min'],[b.quick,b.medium,b.long],[color.green,color.blue,color.red]);
@@ -51,7 +51,7 @@ async function loadHistory(){
  const status=$('historyStatus');
  try{
   const rows=await getJson('./history/snapshots.json');
-  if(!Array.isArray(rows))throw Error('Formato of histórico incorrecto');
+  if(!Array.isArray(rows))throw Error('Invalid history format');
   const recent=rows.slice(-336);
   const dates=recent.map(x=>new Date(x.at).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
   const series=[
@@ -62,7 +62,7 @@ async function loadHistory(){
   for(const [id,data] of series){
    if(!window.Chart)continue;
    state.charts[id]?.destroy();
-   state.charts[id]=new window.Chart($(id),{type:'line',data:{labels:dates,datasets:[{data,label:id==='historyBiziChart'?'Empty stations':id==='historyBusChart'?'% of predicciones':'API errors',borderColor:'#16558c',backgroundColor:'#16558c',pointRadius:0,spanGaps:false,tension:.15}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true}},plugins:{legend:{display:false}}}});
+   state.charts[id]=new window.Chart($(id),{type:'line',data:{labels:dates,datasets:[{data,label:id==='historyBiziChart'?'Empty stations':id==='historyBusChart'?'% of predictions':'API errors',borderColor:'#16558c',backgroundColor:'#16558c',pointRadius:0,spanGaps:false,tension:.15}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true}},plugins:{legend:{display:false}}}});
   }
   const first=rows[0]?.at,last=rows.at(-1)?.at;
   status.textContent=rows.length?`${rows.length} snapshots recorded · from ${new Date(first).toLocaleString('en-GB')} to ${new Date(last).toLocaleString('en-GB')} · showing the latest ${recent.length}`:'No measurements yet. The first snapshot will appear after the scheduled workflow runs.';
