@@ -1,81 +1,142 @@
-// Scheduled public-data snapshots. Never treat unavailable data as zero.
+// Scheduled collection: only actual provider responses become observations.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
-import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,stopId,parseBusLines} from '../site/data.js';
-const output='site/history/snapshots.json';
-const detailsOutput='site/history/bus-details.json';
-const incidentOutput='site/history/incidents.json';
-let observations=[];
-const get=async url=>{const response=await fetch(url,{signal:AbortSignal.timeout(18000),headers:{accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return response.json()};
+import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines} from '../site/data.js';
+
+const paths={
+ summary:'site/history/snapshots.json',
+ detail:'site/history/bus-details.json',
+ incidents:'site/history/incidents.json',
+ latest:'site/history/latest.json',
+ timeline:'site/history/timeline.json'
+};
 const now=new Date().toISOString();
-const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'}};
+const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'},incidents:{status:'unavailable'}};
+const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavailable',sampled:0,population:0,stops:[]}};
+const observations=[];
+const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
+const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
+const readJson=async(path,fallback)=>{try{return JSON.parse(await readFile(path,'utf8'))}catch{return fallback}};
+const saveJson=async(path,data)=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,JSON.stringify(data)+String.fromCharCode(10))};
+async function get(url){
+ for(let attempt=0;attempt<2;attempt++){
+  try{
+   const response=await fetch(url,{signal:AbortSignal.timeout(16000),headers:{accept:'application/json'}});
+   if(!response.ok)throw Error('HTTP '+response.status);
+   return await response.json();
+  }catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,500))}
+ }
+}
+
 try{
  const root=await get(BIZI_GBFS);
  const feeds=root.data?.feeds||Object.values(root.data||{}).find(x=>Array.isArray(x?.feeds))?.feeds||[];
  const info=feeds.find(x=>x.name==='station_information')?.url;
  const status=feeds.find(x=>x.name==='station_status')?.url;
- if(!info||!status)throw Error('GBFS feeds missing');
- const [i,s]=await Promise.all([get(info),get(status)]);
- const ids=new Set(asItems(i).map(x=>String(x.station_id)));
- const stations=asItems(s).filter(x=>ids.has(String(x.station_id)));
- const numeric=(x)=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
- const availability=stations.map(x=>numeric(x.num_vehicles_available??x.num_bikes_available));
- const disabled=stations.map(x=>numeric(x.num_vehicles_disabled??x.num_bikes_disabled));
- snapshot.bizi={status:'ok',total:stations.length,known:availability.filter(x=>x!==null).length,empty:availability.filter(x=>x===0).length,available:availability.reduce((a,b)=>a+(b??0),0),disabledKnown:disabled.filter(x=>x!==null).length,disabled:disabled.reduce((a,b)=>a+(b??0),0)};
-}catch(e){snapshot.bizi.error=String(e.message).slice(0,120)}
+ if(!info||!status)throw Error('Required GBFS feeds missing');
+ const [infoData,statusData]=await Promise.all([get(info),get(status)]);
+ const statuses=new Map(asItems(statusData).map(x=>[String(x.station_id),x]));
+ const stations=asItems(infoData).map(x=>{
+  const v=statuses.get(String(x.station_id))||{};
+  const coords=coordinate(coordsOf(x));
+  return {id:String(x.station_id),name:String(x.name??x.station_id),coords,
+   available:numeric(v.num_vehicles_available??v.num_bikes_available),
+   disabled:numeric(v.num_vehicles_disabled??v.num_bikes_disabled),
+   docks:numeric(v.num_docks_available)};
+ }).filter(x=>x.coords);
+ if(!stations.length)throw Error('No Bizi stations with coordinates');
+ frame.bizi={status:'ok',stations};
+ const known=stations.filter(x=>x.available!==null);
+ const withDisabled=stations.filter(x=>x.disabled!==null);
+ snapshot.bizi={status:'ok',total:stations.length,known:known.length,
+  empty:known.filter(x=>x.available===0).length,
+  available:known.reduce((n,x)=>n+x.available,0),
+  disabledKnown:withDisabled.length,
+  disabled:withDisabled.reduce((n,x)=>n+x.disabled,0)};
+}catch(e){snapshot.bizi.error=String(e.message).slice(0,160)}
+
 try{
- const stops=[],seen=new Set();
+ const discovered=[],seen=new Set();
  for(let start=0;start<4000;start+=500){
   const batch=asItems(await get(`${BUS_API}.json?rows=500&start=${start}&srsname=wgs84`));
-  for(const item of batch){const id=stopId(item);if(id?.startsWith('tuzsa-')&&!seen.has(id)){seen.add(id);stops.push(id)}}
+  for(const x of batch){
+   const id=stopId(x),coords=coordinate(coordsOf(x));
+   if(!id?.startsWith('tuzsa-')||!coords||seen.has(id))continue;
+   seen.add(id);discovered.push({id,coords,name:String(x.title??x.nombre??x.name??id)});
+  }
   if(batch.length<500)break;
  }
- if(!stops.length)throw Error('No stops returned');
- stops.sort();
- // Rotating sample, not a citywide census. A fixed sample size limits API pressure.
- const sampleSize=Math.min(60,stops.length);
- const start=(Math.floor(Date.now()/1800000)*61)%stops.length;
- const sample=Array.from({length:sampleSize},(_,i)=>stops[(start+i)%stops.length]);
+ if(!discovered.length)throw Error('No bus stops with coordinates');
+ discovered.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
+ const size=Math.min(60,discovered.length);
+ const start=(Math.floor(Date.now()/1800000)*61)%discovered.length;
+ const sample=Array.from({length:size},(_,i)=>discovered[(start+i)%discovered.length]);
+ frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[]};
  let known=0,unknown=0,errors=0,long=0,estimates=0;
  for(let offset=0;offset<sample.length;offset+=6){
-  await Promise.all(sample.slice(offset,offset+6).map(async id=>{
-   try{const lines=parseBusLines(await get(`${BUS_API}/${encodeURIComponent(id)}.json`));
-    const valid=lines.filter(x=>x.minutes!==null);
+  await Promise.all(sample.slice(offset,offset+6).map(async stop=>{
+   try{
+    const lines=parseBusLines(await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`));
+    const arrivals=lines.map(x=>({line:x.line,minutes:x.minutes}));
+    const valid=arrivals.filter(x=>x.minutes!==null);
+    const status=valid.length?'known':'unknown';
     if(valid.length)known++;else unknown++;
-    observations.push({stop:id,status:valid.length?'known':'unknown',lines:lines.map(x=>({line:x.line,minutes:x.minutes}))});
     estimates+=valid.length;long+=valid.filter(x=>x.minutes>15).length;
-   }catch{errors++;observations.push({stop:id,status:'error',lines:[]})}
+    frame.bus.stops.push({...stop,arrivals,status});
+    observations.push({stop:stop.id,status,lines:arrivals});
+   }catch{
+    errors++;frame.bus.stops.push({...stop,arrivals:[],status:'error'});
+    observations.push({stop:stop.id,status:'error',lines:[]});
+   }
   }));
  }
- snapshot.bus={status:'ok',population:stops.length,sampled:sample.length,known,unknown,errors,estimates,over15:long,sampling:'rotating'};
-}catch(e){snapshot.bus.error=String(e.message).slice(0,120)}
+ frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
+ snapshot.bus={status:'ok',population:discovered.length,sampled:size,
+  known,unknown,errors,estimates,over15:long,sampling:'rotating'};
+}catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
+
 try{
  const data=await get(`${INCIDENT_API}.json?rows=500&start=0&srsname=wgs84`);
- if(!Array.isArray(data?.result))throw Error('Unexpected incident API response');
- const entries=data.result.map(x=>({
-  id:x.id,title:x.title,calle:x.calle,tipo:{id:x.tipo?.id},
-  inicio:x.inicio,fin:x.fin,lastUpdated:x.lastUpdated,
-  geometry:x.geometry,uri:x.uri
- }));
- const totalCount=Number.isFinite(Number(data.totalCount))?Number(data.totalCount):entries.length;
- if(totalCount>0&&!entries.length)throw Error('Incident API returned no records');
- await writeFile(incidentOutput,JSON.stringify({fetchedAt:now,totalCount,items:entries})+String.fromCharCode(10));
- snapshot.incidents={status:'ok',fetched:entries.length,totalCount};
-}catch(e){snapshot.incidents={status:'unavailable',error:String(e.message).slice(0,120)}}
-let history=[];
-try{const saved=JSON.parse(await readFile(output,'utf8'));if(Array.isArray(saved))history=saved}catch{}
-history.push(snapshot);
-history=history.filter(x=>x&&typeof x.at==='string'&&Date.parse(x.at)>=Date.now()-90*86400000).slice(-4500);
-await mkdir(dirname(output),{recursive:true});
-await writeFile(output,JSON.stringify(history,null,2)+String.fromCharCode(10));
-// Aggregated by stop and line. Retains counts rather than personally identifying journeys.
-let detail={schema:1,updatedAt:now,stops:{},lines:{}};
-try{const existing=JSON.parse(await readFile(detailsOutput,'utf8'));if(existing?.schema===1&&existing.stops&&existing.lines)detail=existing}catch{}
+ const items=Array.isArray(data?.result)?data.result:Array.isArray(data)?data:null;
+ if(!items)throw Error('Unexpected incidents API response');
+ const records=items.map(x=>({id:x.id,title:x.title,calle:x.calle,
+  tipo:{id:x.tipo?.id??x.tipo},inicio:x.inicio,fin:x.fin,
+  lastUpdated:x.lastUpdated,geometry:x.geometry,uri:x.uri??x.link}));
+ const totalCount=Number.isFinite(Number(data.totalCount))?Number(data.totalCount):records.length;
+ await saveJson(paths.incidents,{fetchedAt:now,totalCount,items:records});
+ snapshot.incidents={status:'ok',fetched:records.length,totalCount};
+}catch(e){snapshot.incidents.error=String(e.message).slice(0,160)}
+
+// The fast bootstrap file retains the most recent *successful* source capture
+// and its original timestamp; it never silently relabels old data as new.
+const previous=await readJson(paths.latest,null);
+const latest={schema:1,at:now,
+ bizi:frame.bizi.status==='ok'?{...frame.bizi,capturedAt:now}:(previous?.bizi??frame.bizi),
+ bus:frame.bus.status==='ok'?{...frame.bus,capturedAt:now}:(previous?.bus??frame.bus)};
+await saveJson(paths.latest,latest);
+
+// Timeline frames are immutable measurements. Missing sources remain missing.
+const timeline=await readJson(paths.timeline,{schema:1,frames:[]});
+const frames=Array.isArray(timeline?.frames)?timeline.frames:[];
+frames.push(frame);
+const retained=frames.filter(x=>x?.at&&Date.parse(x.at)>=Date.now()-7*86400000).slice(-336);
+await saveJson(paths.timeline,{schema:1,updatedAt:now,retentionDays:7,frames:retained});
+
+const summary=await readJson(paths.summary,[]);
+const summaries=Array.isArray(summary)?summary:[];
+summaries.push(snapshot);
+await saveJson(paths.summary,summaries.filter(x=>x?.at&&Date.parse(x.at)>=Date.now()-90*86400000).slice(-4500));
+
+// Route and stop aggregates stay separate from the map's seven-day time series.
+const oldDetail=await readJson(paths.detail,{schema:1,stops:{},lines:{}});
+const detail=oldDetail?.schema===1&&oldDetail?.stops&&oldDetail?.lines?oldDetail:{schema:1,stops:{},lines:{}};
 const bump=(record,key)=>{record[key]=(record[key]||0)+1};
 for(const observation of observations){
  const stop=detail.stops[observation.stop]??={samples:0,known:0,unknown:0,errors:0,over15:0,estimates:0,lastSeen:null};
- bump(stop,'samples');bump(stop,observation.status==='known'?'known':observation.status==='error'?'errors':'unknown');stop.lastSeen=now;
- for(const arrival of observation.lines){if(arrival.minutes===null)continue;
+ bump(stop,'samples');bump(stop,observation.status==='known'?'known':observation.status==='error'?'errors':'unknown');
+ stop.lastSeen=now;
+ for(const arrival of observation.lines){
+  if(arrival.minutes===null)continue;
   bump(stop,'estimates');if(arrival.minutes>15)bump(stop,'over15');
   const line=detail.lines[arrival.line]??={samples:0,over15:0,totalMinutes:0,stops:{}};
   bump(line,'samples');line.totalMinutes+=arrival.minutes;if(arrival.minutes>15)bump(line,'over15');
@@ -84,5 +145,5 @@ for(const observation of observations){
  }
 }
 detail.updatedAt=now;
-await writeFile(detailsOutput,JSON.stringify(detail)+String.fromCharCode(10));
+await saveJson(paths.detail,detail);
 console.log(JSON.stringify(snapshot));
