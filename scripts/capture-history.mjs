@@ -110,7 +110,7 @@ try{
 // The fast bootstrap file retains the most recent *successful* source capture
 // and its original timestamp; it never silently relabels old data as new.
 const previous=await readJson(paths.latest,null);
-const latest={schema:1,at:now,
+const latest={schema:1,at:frame.bizi.status==='ok'||frame.bus.status==='ok'?now:(previous?.at??null),
  bizi:frame.bizi.status==='ok'?{...frame.bizi,capturedAt:now}:(previous?.bizi??frame.bizi),
  bus:frame.bus.status==='ok'?{...frame.bus,capturedAt:now}:(previous?.bus??frame.bus)};
 await saveJson(paths.latest,latest);
