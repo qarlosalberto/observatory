@@ -1,1 +1,1 @@
-[]
+[{"at":"2026-11-08T20:44:06.483Z","bizi":{"status":"ok","total":276,"known":276,"empty":30,"available":1504,"disabledKnown":276,"disabled":141},"bus":{"status":"ok","population":983,"sampled":60,"known":0,"unknown":0,"errors":60,"estimates":0,"over15":0,"sampling":"rotating"},"incidents":{"status":"unavailable","error":"HTTP 404"}}]
