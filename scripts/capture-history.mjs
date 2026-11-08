@@ -3,6 +3,8 @@ import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {BUS_API,BIZI_GBFS,asItems,stopId,parseBusLines} from '../site/data.js';
 const output='site/history/snapshots.json';
+const detailsOutput='site/history/bus-details.json';
+let observations=[];
 const get=async url=>{const response=await fetch(url,{signal:AbortSignal.timeout(18000),headers:{accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return response.json()};
 const now=new Date().toISOString();
 const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'}};
@@ -31,7 +33,7 @@ try{
  stops.sort();
  // Rotating sample, not a citywide census. A fixed sample size limits API pressure.
  const sampleSize=Math.min(60,stops.length);
- const start=(Math.floor(Date.now()/1800000)*sampleSize)%stops.length;
+ const start=(Math.floor(Date.now()/1800000)*61)%stops.length;
  const sample=Array.from({length:sampleSize},(_,i)=>stops[(start+i)%stops.length]);
  let known=0,unknown=0,errors=0,long=0,estimates=0;
  for(let offset=0;offset<sample.length;offset+=6){
@@ -39,8 +41,9 @@ try{
    try{const lines=parseBusLines(await get(`${BUS_API}/${encodeURIComponent(id)}.json`));
     const valid=lines.filter(x=>x.minutes!==null);
     if(valid.length)known++;else unknown++;
+    observations.push({stop:id,status:valid.length?'known':'unknown',lines:lines.map(x=>({line:x.line,minutes:x.minutes}))});
     estimates+=valid.length;long+=valid.filter(x=>x.minutes>15).length;
-   }catch{errors++}
+   }catch{errors++;observations.push({stop:id,status:'error',lines:[]})}
   }));
  }
  snapshot.bus={status:'ok',population:stops.length,sampled:sample.length,known,unknown,errors,estimates,over15:long,sampling:'rotating'};
@@ -50,5 +53,22 @@ try{const saved=JSON.parse(await readFile(output,'utf8'));if(Array.isArray(saved
 history.push(snapshot);
 history=history.filter(x=>x&&typeof x.at==='string'&&Date.parse(x.at)>=Date.now()-90*86400000).slice(-4500);
 await mkdir(dirname(output),{recursive:true});
-await writeFile(output,JSON.stringify(history,null,2)+'\n');
+await writeFile(output,JSON.stringify(history,null,2)+'\\n'.replace('\\\\n','\\n'));
+// Aggregated by stop and line. Retains counts rather than personally identifying journeys.
+let detail={schema:1,updatedAt:now,stops:{},lines:{}};
+try{const existing=JSON.parse(await readFile(detailsOutput,'utf8'));if(existing?.schema===1&&existing.stops&&existing.lines)detail=existing}catch{}
+const bump=(record,key)=>{record[key]=(record[key]||0)+1};
+for(const observation of observations){
+ const stop=detail.stops[observation.stop]??={samples:0,known:0,unknown:0,errors:0,over15:0,estimates:0,lastSeen:null};
+ bump(stop,'samples');bump(stop,observation.status==='known'?'known':observation.status==='error'?'errors':'unknown');stop.lastSeen=now;
+ for(const arrival of observation.lines){if(arrival.minutes===null)continue;
+  bump(stop,'estimates');if(arrival.minutes>15)bump(stop,'over15');
+  const line=detail.lines[arrival.line]??={samples:0,over15:0,totalMinutes:0,stops:{}};
+  bump(line,'samples');line.totalMinutes+=arrival.minutes;if(arrival.minutes>15)bump(line,'over15');
+  const atStop=line.stops[observation.stop]??={samples:0,over15:0,totalMinutes:0};
+  bump(atStop,'samples');atStop.totalMinutes+=arrival.minutes;if(arrival.minutes>15)bump(atStop,'over15');
+ }
+}
+detail.updatedAt=now;
+await writeFile(detailsOutput,JSON.stringify(detail)+'\\n'.replace('\\\\n','\\n'));
 console.log(JSON.stringify(snapshot));
