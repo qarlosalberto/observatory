@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
  parseBusLines,minutesOf,stopId,summarizeBikes,summarizeBuses,
- incidentCoords,incidentPhase,normalizeIncidents
+ incidentCoords,incidentPhase,normalizeIncidents,stationName,INCIDENT_API
 } from '../site/data.js';
 
 test('each route retains its next arrival, including unavailable predictions',()=>{
@@ -60,4 +60,13 @@ test('incident normalization preserves official names while rejecting unsafe lin
  assert.equal(items[1].type,'water');
  assert.equal(items[1].link,null);
  assert.equal(items[0].start,'2026-11-01');
+});
+
+test('incident API uses the current official municipal route',()=>{
+ assert.equal(INCIDENT_API,'https://www.zaragoza.es/sede/servicio/via-publica/incidencia');
+});
+test('GBFS multilingual labels and old invalid labels never render as objects',()=>{
+ assert.equal(stationName([{language:'es',text:'Plaza de España'},{language:'en',text:'Spain Square'}],'2'),'Spain Square');
+ assert.equal(stationName([{language:'es',text:'Plaza de España'}],'2'),'Plaza de España');
+ assert.equal(stationName('[object Object],[object Object]','2'),'2');
 });

@@ -1,6 +1,6 @@
 export const BUS_API='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/transporte-urbano/poste-autobus';
 export const BIZI_GBFS='https://zaragoza.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json';
-export const INCIDENT_API='https://www.zaragoza.es/sede/servicio/incidencia/via-publica';
+export const INCIDENT_API='https://www.zaragoza.es/sede/servicio/via-publica/incidencia';
 export const BIZI_FALLBACK='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/estacion-bicicleta';
 export const asItems = data => Array.isArray(data)?data:[data?.result,data?.results,data?.features,data?.data?.stations,data?.data?.items,data?.data?.results,data?.stations].find(Array.isArray)||[];
 export function coordsOf(obj){
@@ -90,4 +90,20 @@ export function normalizeIncidents(items){
   try{const parsed=new URL(url);if(parsed.protocol==='https:'&&(parsed.hostname==='www.zaragoza.es'||parsed.hostname==='zaragoza.es'))link=parsed.href}catch{}
   return {id,title:String(x.title??x.calle??'Unnamed location').trim(),street:String(x.calle??'').trim(),type,start:date(x.inicio),end:date(x.fin),updated:date(x.lastUpdated),coords:incidentCoords(x),link};
  }).filter(x=>{const key=x.id||[x.title,x.start,x.type].join(':');if(seen.has(key))return false;seen.add(key);return true});
+}
+
+/** Choose a provider-supplied GBFS label without stringifying translation objects. */
+export function stationName(value,id){
+ if(typeof value==='string'&&value.trim()&&!value.includes('[object Object]'))return value.trim();
+ if(Array.isArray(value)){
+  const entries=value.filter(x=>x&&typeof x==='object').map(x=>({language:x.language??x.lang,text:x.text??x.value}));
+  const chosen=entries.find(x=>x.language==='en'&&typeof x.text==='string'&&x.text.trim())
+   ??entries.find(x=>x.language==='es'&&typeof x.text==='string'&&x.text.trim())
+   ??entries.find(x=>typeof x.text==='string'&&x.text.trim());
+  if(chosen)return chosen.text.trim();
+ }
+ if(value&&typeof value==='object'&&!Array.isArray(value)){
+  for(const field of ['en','es','text','value'])if(typeof value[field]==='string'&&value[field].trim())return value[field].trim();
+ }
+ return String(id??'Unknown station');
 }

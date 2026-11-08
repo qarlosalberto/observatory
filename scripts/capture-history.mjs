@@ -1,7 +1,7 @@
 // Scheduled collection: only actual provider responses become observations.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
-import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines} from '../site/data.js';
+import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName} from '../site/data.js';
 
 const paths={
  summary:'site/history/snapshots.json',
@@ -16,16 +16,6 @@ const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavail
 const observations=[];
 const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
 const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
-const stationName=(value,id)=>{
- if(typeof value==='string'&&value.trim())return value.trim();
- if(Array.isArray(value)){
-  const named=value.find(x=>x&&typeof x==='object'&&x.language==='en'&&typeof x.text==='string')
-   ??value.find(x=>x&&typeof x==='object'&&x.language==='es'&&typeof x.text==='string')
-   ??value.find(x=>x&&typeof x==='object'&&typeof x.text==='string');
-  if(named?.text?.trim())return named.text.trim();
- }
- return String(id);
-};
 const readJson=async(path,fallback)=>{try{return JSON.parse(await readFile(path,'utf8'))}catch{return fallback}};
 const saveJson=async(path,data)=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,JSON.stringify(data)+String.fromCharCode(10))};
 async function get(url){
@@ -83,10 +73,14 @@ try{
  const sample=Array.from({length:size},(_,i)=>discovered[(start+i)%discovered.length]);
  frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[]};
  let known=0,unknown=0,errors=0,long=0,estimates=0;
+ const failures=[];
  for(let offset=0;offset<sample.length;offset+=6){
   await Promise.all(sample.slice(offset,offset+6).map(async stop=>{
    try{
-    const lines=parseBusLines(await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`));
+    let response;
+    try{response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`)}
+    catch(e){if(e.message!=='HTTP 404')throw e;response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}`)}
+    const lines=parseBusLines(response);
     const arrivals=lines.map(x=>({line:x.line,minutes:x.minutes}));
     const valid=arrivals.filter(x=>x.minutes!==null);
     const status=valid.length?'known':'unknown';
@@ -94,8 +88,9 @@ try{
     estimates+=valid.length;long+=valid.filter(x=>x.minutes>15).length;
     frame.bus.stops.push({...stop,arrivals,status});
     observations.push({stop:stop.id,status,lines:arrivals});
-   }catch{
-    errors++;frame.bus.stops.push({...stop,arrivals:[],status:'error'});
+   }catch(e){
+    errors++;if(failures.length<3)failures.push(`${stop.id}: ${String(e.message).slice(0,90)}`);
+    frame.bus.stops.push({...stop,arrivals:[],status:'error'});
     observations.push({stop:stop.id,status:'error',lines:[]});
    }
   }));
@@ -104,7 +99,8 @@ try{
  if(errors===size)frame.bus.status='unavailable';
  snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
   known,unknown,errors,estimates,over15:long,sampling:'rotating',
-  ...(errors===size?{error:'All sampled bus arrival requests failed'}:{})};
+  ...(errors===size?{error:'All sampled bus arrival requests failed'}:{}),
+  ...(failures.length?{failureExamples:failures}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
 
 try{

@@ -4,7 +4,7 @@ import {join,dirname} from 'node:path';
 const require=createRequire(import.meta.url);
 const leafletJs=require.resolve('leaflet/dist/leaflet.js'),leafletCss=require.resolve('leaflet/dist/leaflet.css'),chartJs=join(dirname(require.resolve('chart.js')),'chart.umd.js');
 const BUS='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/transporte-urbano/poste-autobus';
-const INCIDENT='https://www.zaragoza.es/sede/servicio/incidencia/via-publica';
+const INCIDENT='https://www.zaragoza.es/sede/servicio/via-publica/incidencia';
 const GBFS='https://zaragoza.publicbikesystem.net/customer/gbfs/v3.0/';
 const response=data=>({status:200,contentType:'application/json',headers:{'access-control-allow-origin':'*'},body:JSON.stringify(data)});
 const before='2026-11-08T10:00:00.000Z',after='2026-11-08T10:30:00.000Z';
