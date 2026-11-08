@@ -23,7 +23,7 @@
   <section class="intro" aria-labelledby="pageTitle">
     <div class="intro-copy"><p class="eyebrow"><span class="eyebrow-line"></span> OPEN DATA / CITY INTELLIGENCE</p><h1 id="pageTitle">A clearer picture of <em>your city.</em></h1><p>Explore buses, shared bikes and public-space disruptions in Zaragoza. Grounded in published data, with uncertainty shown instead of hidden.</p><div class="intro-links"><span class="intro-chip">Independent observatory</span><span class="intro-chip">Transparent methodology</span></div></div>
     <div class="intro-stats" aria-label="Quick service summary">
-      <div class="hero-stat"><span>Bus predictions</span><strong id="overviewBus">—</strong><small>Live observations</small></div>
+      <div class="hero-stat"><span>Bus predictions</span><strong id="overviewBus">—</strong><small>Recorded observations</small></div>
       <div class="hero-stat"><span>Bizi bikes available</span><strong id="overviewBike">—</strong><small>Provider-reported</small></div>
       <div class="hero-stat"><span>Active street notices</span><strong id="overviewIncidents">—</strong><small>Published incidents</small></div>
     </div>
@@ -37,14 +37,14 @@
     <button type="button" role="tab" id="tab-method" aria-controls="methodView" aria-selected="false" tabindex="-1" data-view="method"><span class="tab-icon" aria-hidden="true">ⓘ</span>Methodology</button>
   </nav>
   <section id="overviewView" class="view" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
-    <div class="panel-heading"><div><p class="section-kicker">AT A GLANCE</p><h2>City service overview</h2><p>Live measurements, not a claim of timetable punctuality.</p></div><span class="timestamp" id="updated">Not updated</span></div>
+    <div class="panel-heading"><div><p class="section-kicker">AT A GLANCE</p><h2>City service overview</h2><p>Most recently captured measurements, not a claim of timetable punctuality.</p></div><span class="timestamp" id="updated">Not updated</span></div>
     <div id="kpis" class="kpis"></div>
-    <div class="section-divider"><span>LIVE MAP</span><span>Zoom in to inspect individual stops</span></div>
+    <div class="section-divider"><span>LIVE MAP</span><span>Browse recorded observations over time</span></div>
     <div id="overviewMapHost"></div>
     <div class="overview-cta"><div><strong>Street works, closures and disruptions</strong><p>See dates, locations and categories from the city’s official notices.</p></div><button type="button" id="openIncidents" class="secondary">Explore incidents <span aria-hidden="true">↗</span></button></div>
   </section>
   <section id="busesView" class="view hidden" role="tabpanel" aria-labelledby="tab-buses" tabindex="0">
-    <div class="panel-heading"><div><p class="section-kicker">PUBLIC TRANSPORT</p><h2>Bus network</h2><p>Next-arrival predictions at stops within the visible map area.</p></div><span class="section-pill">Live API</span></div>
+    <div class="panel-heading"><div><p class="section-kicker">PUBLIC TRANSPORT</p><h2>Bus network</h2><p>Predictions from sampled stops, captured at a stated time.</p></div><span class="section-pill">Recorded API data</span></div>
     <div id="busKpis" class="kpis"></div>
     <div class="charts single-chart"><article class="chart-card"><h3>Predicted wait distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Predicted waiting times by route"></canvas></div><p id="busNote" class="note"></p></article></div>
     <div class="section-divider"><span>BUS MAP</span><span>Select any visible stop to inspect routes</span></div>
@@ -55,14 +55,30 @@
     <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Live API</span></div>
     <div id="biziKpis" class="kpis"></div>
     <div class="charts two-charts"><article class="chart-card"><h3>Station availability</h3><div class="chart-wrap"><canvas id="bikeChart" aria-label="Stations by available bike count"></canvas></div><p id="bikeNote" class="note"></p></article><article class="chart-card"><h3>Available vs. out of service</h3><div class="chart-wrap"><canvas id="faultChart" aria-label="Available and out-of-service bikes"></canvas></div><p id="faultNote" class="note"></p></article></div>
-    <div class="section-divider"><span>BIZI MAP</span><span>Station availability at a glance</span></div>
+    <div class="section-divider"><span>BIZI MAP</span><span>Recorded station availability</span></div>
     <div id="biziMapHost"></div>
     <p class="fineprint">Missing out-of-service values are unknown, not zero. Comparisons use only stations with both fields reported.</p>
   </section>
   <div id="mapWorkspace" class="map-workspace">
-    <div class="map-toolbar"><div class="map-toolbar-title"><strong id="mapTitle">Live service map</strong><small>Official source data, refreshed periodically</small></div><button type="button" id="refresh" class="primary"><span aria-hidden="true">↻</span> Refresh</button></div>
+    <div class="map-toolbar"><div class="map-toolbar-title"><strong id="mapTitle">Recorded service map</strong><small>Recorded snapshots · refreshed by scheduled collection</small></div><button type="button" id="refresh" class="primary"><span aria-hidden="true">↻</span> Refresh</button></div>
     <div class="toolbar"><fieldset class="layers"><legend>MAP LAYERS</legend><label><input id="showBus" type="checkbox" checked> Buses</label><label><input id="showBizi" type="checkbox" checked> Bizi</label></fieldset><label class="broken-filter"><input id="brokenOnly" type="checkbox"> Show stations with reported issues only</label></div>
     <div id="map" role="region" aria-label="Interactive map of Bizi stations and bus arrival predictions"></div>
+    <div class="timeline-shell" aria-label="Recorded data timeline">
+      <div class="timeline-header">
+        <div><span class="timeline-eyebrow">RECORDED TIMELINE</span><strong id="timelineLabel">Loading latest recorded data…</strong></div>
+        <span id="timelineBadge" class="timeline-badge">Cached · no live requests</span>
+      </div>
+      <input id="timelineSlider" type="range" min="0" max="0" value="0" step="1" disabled aria-label="Browse recorded snapshots" aria-describedby="timelineCoverage">
+      <div class="timeline-bottom">
+        <div class="timeline-actions">
+          <button type="button" id="timelinePrev" class="timeline-control" aria-label="Previous recorded snapshot" disabled>←</button>
+          <button type="button" id="timelineNext" class="timeline-control" aria-label="Next recorded snapshot" disabled>→</button>
+          <button type="button" id="timelineLatest" class="timeline-control timeline-latest">Latest capture</button>
+        </div>
+        <span id="timelineCoverage" class="timeline-coverage">Collecting recorded measurements · no extrapolation</span>
+        <button type="button" id="liveButton" class="timeline-live">Fetch live data <span aria-hidden="true">↗</span></button>
+      </div>
+    </div>
     <div class="legend"><span><i style="--c:#13865d"></i>Bizi: 3+ bikes</span><span><i style="--c:#f1aa41"></i>Bizi: 1–2 bikes</span><span><i style="--c:#e25c61"></i>Bizi empty / bus &gt;15 min</span><span><i style="--c:#5188e2"></i>Bus ≤15 min</span><span><i style="--c:#89929f"></i>Unknown Bizi</span></div>
     <p id="status" role="status" aria-live="polite" class="status">Loading public data sources…</p>
   </div>
