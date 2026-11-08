@@ -73,6 +73,94 @@ function refresh(force=false){
  report();
 }
 function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
+function applyRecordedFrame(frame){
+ state.liveMode=false;state.liveEpoch++;
+ state.snapshotAt=frame?.at||null;
+ state.snapshotBusAt=frame?.bus?.capturedAt||((frame?.bus?.status==='ok')?frame.at:null);
+ state.snapshotBiziAt=frame?.bizi?.capturedAt||((frame?.bizi?.status==='ok')?frame.at:null);
+ state.snapshotBusPopulation=frame?.bus?.population||0;
+ state.snapshotBusSampled=frame?.bus?.sampled||0;
+ state.stations=(frame?.bizi?.stations||[]).filter(x=>Array.isArray(x.coords)&&x.coords.length===2).map(x=>({
+  name:String(x.name??x.id),coords:x.coords,available:x.available??null,disabled:x.disabled??null,docks:x.docks??null
+ }));
+ state.stops=(frame?.bus?.stops||[]).filter(x=>Array.isArray(x.coords)&&x.coords.length===2).map(x=>({
+  id:String(x.id),name:String(x.name??x.id),coords:x.coords,
+  arrivals:Array.isArray(x.arrivals)?x.arrivals.map(a=>({line:String(a.line),minutes:a.minutes??null})):[],
+  checked:1,apiResult:x.status||'unknown'
+ }));
+ state.bikeSource=state.snapshotBiziAt?'Recorded GBFS':'';
+ state.bikeError='';state.busError='';
+ for(const [id,marker] of state.markers)removeBus(id,marker);
+ bikeMarkers();busMarkers();report();
+ $('timelineLabel').textContent=(state.selectedFrameIndex===null?'Latest available capture · ':'Historical capture · ')+formatSnapshotTime(frame?.at);
+ $('timelineBadge').textContent='Recorded · no live requests';
+ $('liveButton').textContent='Fetch live data ↗';
+ const bus=state.snapshotBusAt?'Bus '+formatSnapshotTime(state.snapshotBusAt):'No bus measurements';
+ const bikes=state.snapshotBiziAt?'Bizi '+formatSnapshotTime(state.snapshotBiziAt):'No Bizi measurements';
+ $('timelineCoverage').textContent=bus+' · '+bikes+' · '+state.snapshotBusSampled+' sampled stops';
+}
+async function loadLatestSnapshot(force=false){
+ try{
+  const frame=await getJson('./history/latest.json'+(force?'?t='+Date.now():''));
+  if(frame?.schema!==1||!frame.at||!Number.isFinite(Date.parse(frame.at)))throw Error('No completed capture');
+  state.latest=frame;
+  if(!state.liveMode&&state.selectedFrameIndex===null)applyRecordedFrame(frame);
+ }catch(e){
+  if(!state.latest&&!state.liveMode){
+   state.snapshotAt=null;
+   $('timelineLabel').textContent='Awaiting first scheduled capture';
+   $('timelineCoverage').textContent='The timeline will populate after a successful collection';
+   report();
+  }
+ }
+}
+async function loadTimeline(force=false){
+ if(state.timelineLoading||state.timeline&&!force)return;
+ state.timelineLoading=true;
+ try{
+  const data=await getJson('./history/timeline.json'+(force?'?t='+Date.now():''));
+  if(data?.schema!==1||!Array.isArray(data.frames))throw Error('Invalid timeline');
+  const frames=data.frames.filter(f=>f?.at&&Number.isFinite(Date.parse(f.at))).sort((a,b)=>a.at.localeCompare(b.at));
+  state.timeline=frames;
+  const slider=$('timelineSlider');
+  slider.max=String(Math.max(0,frames.length-1));
+  slider.value=String(frames.length-1);
+  slider.disabled=!frames.length;
+  $('timelinePrev').disabled=frames.length<2;
+  $('timelineNext').disabled=frames.length<2;
+  if(!frames.length&&state.latest)$('timelineCoverage').textContent='Timeline will populate as scheduled captures accumulate';
+ }catch(e){$('timelineCoverage').textContent='Recorded timeline not available yet'}
+ finally{state.timelineLoading=false}
+}
+function chooseFrame(index){
+ const frames=state.timeline||[];
+ if(!frames.length)return;
+ const clamped=Math.max(0,Math.min(frames.length-1,Number(index)||0));
+ $('timelineSlider').value=String(clamped);
+ state.selectedFrameIndex=clamped===frames.length-1?null:clamped;
+ applyRecordedFrame(state.selectedFrameIndex===null?(state.latest||frames[clamped]):frames[clamped]);
+}
+function jumpToLatest(){
+ state.selectedFrameIndex=null;
+ const frames=state.timeline||[];
+ $('timelineSlider').value=String(Math.max(0,frames.length-1));
+ if(state.latest)applyRecordedFrame(state.latest);
+ else if(frames.length)applyRecordedFrame(frames[frames.length-1]);
+}
+function toggleLive(){
+ if(state.liveMode){jumpToLatest();return}
+ state.liveMode=true;state.liveEpoch++;
+ state.selectedFrameIndex=null;state.snapshotAt=null;
+ state.stations=[];state.stops=[];
+ state.busFetched=0;state.bikeFetched=0;state.busError='';state.bikeError='';
+ for(const [id,marker] of state.markers)removeBus(id,marker);
+ bikeMarkers();
+ $('timelineLabel').textContent='Fetching live readings on demand…';
+ $('timelineBadge').textContent='Live · manual request';
+ $('timelineCoverage').textContent='These readings are not part of the recorded timeline';
+ $('liveButton').textContent='Return to recorded data';
+ refresh(true);
+}
 async function loadBusRankings(){
  const render=(id,items,type)=>{
   const el=$(id);el.replaceChildren();
@@ -222,10 +310,10 @@ function selectView(view){
  for(const name of views)$(name+'View').classList.toggle('hidden',name!==view);
  if(['overview','buses','bizi'].includes(view)){
   $(view+'MapHost').append($('mapWorkspace'));
-  $('mapTitle').textContent=view==='buses'?'Bus stops & predictions':view==='bizi'?'Bizi station availability':'Live service map';
+  $('mapTitle').textContent=view==='buses'?'Recorded bus predictions':view==='bizi'?'Recorded Bizi stations':'Recorded service map';
   $('showBus').checked=view!=='bizi';$('showBizi').checked=view!=='buses';
   $('brokenOnly').checked=false;
-  refresh(false);
+  if(state.liveMode)refresh(false);else {bikeMarkers();busMarkers();report()}
   requestAnimationFrame(()=>{state.map?.invalidateSize();bikeMarkers();busMarkers();for(const chart of Object.values(state.charts))chart.resize()});
  }else if(view==='incidents'){
   void loadIncidents();
@@ -254,5 +342,22 @@ $('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('show
 $('incidentRefresh').addEventListener('click',()=>void loadIncidents(true));
 for(const id of ['incidentType','incidentPhase','incidentSearch'])$(id).addEventListener(id==='incidentSearch'?'input':'change',renderIncidents);
 $('overviewMapHost').append($('mapWorkspace'));
-initMap();refresh();void loadIncidents();if(['overview','buses','bizi','incidents','history','method'].includes(location.hash.slice(1)))selectView(location.hash.slice(1));setInterval(()=>{if(!document.hidden){refresh();void loadIncidents()}},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){refresh();void loadIncidents()}});
-if(location.hostname==='localhost'||location.hostname==='127.0.0.1')window.__observatoryTest={state,refresh,loadVisibleBusETAs,selectView,loadIncidents};
+$('timelineSlider').addEventListener('input',e=>chooseFrame(e.target.value));
+$('timelinePrev').addEventListener('click',()=>chooseFrame(Number($('timelineSlider').value)-1));
+$('timelineNext').addEventListener('click',()=>chooseFrame(Number($('timelineSlider').value)+1));
+$('timelineLatest').addEventListener('click',jumpToLatest);
+$('liveButton').addEventListener('click',toggleLive);
+initMap();
+report();
+void loadLatestSnapshot();
+void loadIncidents();
+setTimeout(()=>void loadTimeline(),400);
+if(['overview','buses','bizi','incidents','history','method'].includes(location.hash.slice(1)))selectView(location.hash.slice(1));
+setInterval(()=>{
+ if(document.hidden)return;
+ if(state.liveMode)refresh();
+ else if(state.selectedFrameIndex===null)void loadLatestSnapshot(true);
+ if(state.incidentFetched)void loadIncidents();
+},300000);
+document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!state.liveMode&&state.selectedFrameIndex===null)void loadLatestSnapshot(true)});
+if(location.hostname==='localhost'||location.hostname==='127.0.0.1')window.__observatoryTest={state,refresh,loadVisibleBusETAs,selectView,loadIncidents,loadLatestSnapshot,chooseFrame};
