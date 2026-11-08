@@ -129,7 +129,13 @@ async function loadTimeline(force=false){
   state.timeline=frames;
   const slider=$('timelineSlider');
   slider.max=String(Math.max(0,frames.length-1));
-  slider.value=String(frames.length-1);
+  let selected=frames.length-1;
+  if(state.selectedFrameIndex!==null){
+   const existing=frames.findIndex(x=>x.at===state.snapshotAt);
+   if(existing>=0){selected=existing;state.selectedFrameIndex=existing}
+   else {state.selectedFrameIndex=null;if(state.latest&&!state.liveMode)applyRecordedFrame(state.latest)}
+  }
+  slider.value=String(Math.max(0,selected));
   slider.disabled=!frames.length;
   $('timelineFirstDate').textContent=frames.length?formatSnapshotTime(frames[0].at):'Awaiting the first capture';
   $('timelineLastDate').textContent=frames.length?formatSnapshotTime(frames[frames.length-1].at):'No historical measurements';
