@@ -28,7 +28,28 @@ async function loadStops(force=false){if(!$('showBus').checked)return;if(!force&
 async function loadVisibleBusETAs(){if(state.busLoading){state.busReloadRequested=true;return}if(!state.map||!$('showBus').checked||state.map.getZoom()<12||!state.stops.length)return;state.busLoading=true;state.busReloadRequested=false;try{while($('showBus').checked&&state.map.getZoom()>=12){const now=Date.now(),bounds=state.map.getBounds().pad(.12),visible=state.stops.filter(x=>x.id.startsWith('tuzsa-')&&bounds.contains(x.coords)),pending=visible.filter(x=>now-x.checked>60000);if(!pending.length)break;const batch=pending.slice(0,48);report();await Promise.all(Array.from({length:6},async(_,worker)=>{for(let i=worker;i<batch.length;i+=6){const st=batch[i];try{let result;for(let attempt=0;attempt<2;attempt++){try{result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}.json`);break}catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,350))}}st.arrivals=parseBusLines(result);st.apiResult=st.arrivals.some(a=>a.minutes!==null)?'known':'unknown';st.checked=Date.now()}catch{st.arrivals=[];st.apiResult='error';st.checked=Date.now()-30000}}}));busMarkers();report();if(pending.length>48)await new Promise(resolve=>setTimeout(resolve,350))}}finally{state.busLoading=false;report();if(state.busReloadRequested){state.busReloadRequested=false;void loadVisibleBusETAs()}}}
 function refresh(force=false){if($('showBizi').checked)void loadBizi(force);else state.bl.clearLayers();if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}report()}
 function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
-function selectView(view){for(const button of document.querySelectorAll('[data-view]')){const active=button.dataset.view===view;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false')}for(const name of ['map','stats','method'])$(name+'View').classList.toggle('hidden',name!==view);if(view==='map')requestAnimationFrame(()=>state.map?.invalidateSize());if(view==='stats')requestAnimationFrame(()=>{for(const chart of Object.values(state.charts))chart.resize()})}
+async function loadHistory(){
+ const status=$('historyStatus');
+ try{
+  const rows=await getJson('./history/snapshots.json');
+  if(!Array.isArray(rows))throw Error('Formato de histórico incorrecto');
+  const recent=rows.slice(-336);
+  const dates=recent.map(x=>new Date(x.at).toLocaleString('es-ES',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+  const series=[
+   ['historyBiziChart',recent.map(x=>x.bizi?.status==='ok'?x.bizi.empty:null)],
+   ['historyBusChart',recent.map(x=>x.bus?.status==='ok'&&x.bus.estimates>0?Math.round(1000*x.bus.over15/x.bus.estimates)/10:null)],
+   ['historyErrorsChart',recent.map(x=>x.bus?.status==='ok'?x.bus.errors:null)]
+  ];
+  for(const [id,data] of series){
+   if(!window.Chart)continue;
+   state.charts[id]?.destroy();
+   state.charts[id]=new window.Chart($(id),{type:'line',data:{labels:dates,datasets:[{data,label:id==='historyBiziChart'?'Estaciones vacías':id==='historyBusChart'?'% de predicciones':'Errores API',borderColor:'#16558c',backgroundColor:'#16558c',pointRadius:0,spanGaps:false,tension:.15}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true}},plugins:{legend:{display:false}}}});
+  }
+  const first=rows[0]?.at,last=rows.at(-1)?.at;
+  status.textContent=rows.length?`${rows.length} instantáneas registradas · desde ${new Date(first).toLocaleString('es-ES')} hasta ${new Date(last).toLocaleString('es-ES')} · mostrando las últimas ${recent.length}`:'Aún no hay mediciones. La primera captura aparecerá cuando se ejecute el workflow programado.';
+ }catch(e){status.textContent='No se pudo cargar el histórico: '+e.message}
+}
+function selectView(view){for(const button of document.querySelectorAll('[data-view]')){const active=button.dataset.view===view;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false')}for(const name of ['map','stats','history','method'])$(name+'View').classList.toggle('hidden',name!==view);if(view==='map')requestAnimationFrame(()=>state.map?.invalidateSize());if(view==='history')void loadHistory();if(view==='stats')requestAnimationFrame(()=>{for(const chart of Object.values(state.charts))chart.resize()})}
 for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>selectView(b.dataset.view));$('refresh').addEventListener('click',()=>refresh(true));$('showBizi').addEventListener('change',()=>refresh(false));$('showBus').addEventListener('change',()=>refresh(false));$('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('showBizi').checked=true;bikeMarkers();if(!state.stations.length)void loadBizi()});
 initMap();refresh();setInterval(()=>{if(!document.hidden)refresh()},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
 if(location.hostname==='localhost'||location.hostname==='127.0.0.1')window.__observatoryTest={state,refresh,loadVisibleBusETAs,selectView};
