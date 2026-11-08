@@ -1,15 +1,38 @@
-import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses} from './data.js';
+import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes} from './data.js';
 const $=id=>document.getElementById(id);
-const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{}};
+const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',blue:'#4274c7',grey:'#89929f'};
 async function getJson(url){const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timer)}}
+function renderMetricCards(id,cards){
+ const target=$(id);if(!target)return;
+ target.replaceChildren(...cards.map(([label,value,note])=>{
+  const div=document.createElement('article');div.className='kpi';const span=document.createElement('span');span.className='label';span.textContent=label;
+  const strong=document.createElement('strong');strong.textContent=value;
+  const small=document.createElement('small');small.textContent=note;
+  div.append(span,strong,small);return div;
+ }));
+}
 function report(){
  const s=summarizeBikes(state.stations),b=summarizeBuses(state.stops);
  const visible=state.map?state.stops.filter(x=>x.id.startsWith('tuzsa-')&&state.map.getBounds().pad(.12).contains(x.coords)):[];
  $('status').textContent=`Bizi: ${state.stations.length} stations${state.bikeSource?' · '+state.bikeSource:''}${state.bikeError?' · '+state.bikeError:''} | Bus: ${visible.filter(x=>x.checked>0).length}/${visible.length} visible stops queried · ${b.withETA} with predictions · ${b.unknown} without predictions · ${b.errors} errors${state.busLoading?' · Loading…':''}${state.busError?' · '+state.busError:''}`;
  $('updated').textContent=new Date().toLocaleTimeString('en-GB');
  const cards=[['Available bikes',s.known?s.available:'—',s.known+'/'+s.total+' stations reporting'],['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+'/'+s.total+' stations reporting'],['Empty Bizi stations',s.known?s.empty:'—','Among stations with known availability'],['Routes with waits >15 min',b.estimates?b.long:'—',b.estimates+' known predictions']];
- $('kpis').replaceChildren(...cards.map(([label,value,note])=>{const div=document.createElement('article');div.className='kpi';const span=document.createElement('span');span.className='label';span.textContent=label;const strong=document.createElement('strong');strong.textContent=value;const sm=document.createElement('small');sm.textContent=note;div.append(span,strong,sm);return div}));
+ renderMetricCards('kpis',cards);
+ renderMetricCards('busKpis',[
+  ['Known predictions',b.estimates||'—',b.withETA+' stops with an estimate'],
+  ['Predicted waits ≤5 min',b.estimates?b.quick:'—','Known predictions only'],
+  ['Waits >15 min',b.estimates?b.long:'—','Not proof of lateness'],
+  ['API requests without a prediction',b.unknown,'Separate from '+b.errors+' API errors']
+ ]);
+ renderMetricCards('biziKpis',[
+  ['Available bikes',s.known?s.available:'—',s.known+' reporting stations'],
+  ['Empty stations',s.known?s.empty:'—','Out of '+s.known+' with availability data'],
+  ['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+' reporting stations'],
+  ['Data coverage',s.total?Math.round(100*s.known/s.total)+'%':'—',s.known+' of '+s.total+' stations']
+ ]);
+ $('overviewBus').textContent=b.estimates||'—';
+ $('overviewBike').textContent=s.known?s.available:'—';
  $('bikeNote').textContent=s.known?`${s.known} of ${s.total} stations report availability; ${s.total-s.known} unknown.`:'No reliable availability data.';
  $('faultNote').textContent=s.pairedStations?`Comparison across ${s.pairedStations} stations reporting both counts. ${s.total-s.pairedStations} stations have no comparable data.`:'The source does not provide comparable out-of-service bike counts. Unknown does not mean zero.';
  $('busNote').textContent=`${b.estimates} route-level predictions from ${b.withETA} stops. ${b.unknown} responses without predictions; ${b.errors} API errors. Timetable delays cannot be established without scheduled arrival data.`;
@@ -23,7 +46,7 @@ function bikeMarkers(){state.bl.clearLayers();if(!$('showBizi').checked)return;f
 function removeBus(id,marker){state.sl.removeLayer(marker.ring);state.sl.removeLayer(marker.tap);state.markers.delete(id)}
 function busMarkers(){if(!state.map)return;const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();if($('showBus').checked&&zoom>=12)for(const stop of state.stops){if(!bounds.contains(stop.coords))continue;const valid=stop.arrivals.filter(a=>a.minutes!==null);if(!valid.length)continue;active.add(stop.id);const red=valid.some(a=>a.minutes>15),hex=red?color.red:color.blue;const size=zoom>=14?22:zoom===13?14:10,touch=zoom>=14?34:zoom===13?24:17;const shape={radius:size,color:'#fff',weight:size>=22?2.5:1.5,fillColor:hex,fillOpacity:.94};const details=stop.arrivals.map(a=>['Route '+a.line+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']);const signature=JSON.stringify([shape,details]);let marker=state.markers.get(stop.id);if(!marker){const ring=L.circleMarker(stop.coords,{pane:'busPane',...shape,interactive:false}).addTo(state.sl);const tap=L.circleMarker(stop.coords,{pane:'busPane',radius:touch,color:'#000',opacity:0,weight:0,fillOpacity:.001,interactive:true});tap.bindPopup(popup('Stop '+stop.name,details),{autoPan:false}).addTo(state.sl);marker={ring,tap,signature};state.markers.set(stop.id,marker)}else if(marker.signature!==signature){marker.ring.setStyle(shape);marker.ring.setRadius(size);marker.tap.setRadius(touch);marker.tap.setPopupContent(popup('Stop '+stop.name,details));marker.signature=signature}}
  for(const [id,m] of state.markers)if(!active.has(id)&&!m.tap.isPopupOpen())removeBus(id,m)}
-async function loadBizi(force=false){if(!$('showBizi').checked)return;if(!force&&state.stations.length&&Date.now()-state.bikeFetched<60000){bikeMarkers();return}state.bikeError='';try{const feed=await getJson(BIZI_GBFS);const feeds=feed.data?.feeds||Object.values(feed.data||{}).find(x=>Array.isArray(x?.feeds))?.feeds||[];const info=feeds.find(x=>x.name==='station_information')?.url,status=feeds.find(x=>x.name==='station_status')?.url;if(!info||!status)throw Error('Missing GBFS feeds');const [i,s]=await Promise.all([getJson(info),getJson(status)]),statuses=new Map(asItems(s).map(a=>[String(a.station_id),a]));state.stations=asItems(i).map(x=>{const a=statuses.get(String(x.station_id))||{},n=a.num_vehicles_available??a.num_bikes_available,d=a.num_vehicles_disabled??a.num_bikes_disabled,k=a.num_docks_available;return {name:typeof x.name==='string'?x.name:String(x.station_id),coords:coordsOf(x),available:n!=null&&Number.isFinite(+n)?+n:null,disabled:d!=null&&Number.isFinite(+d)?+d:null,docks:k!=null&&Number.isFinite(+k)?+k:null}}).filter(x=>x.coords);if(!state.stations.length)throw Error('No station coordinates');state.bikeSource='GBFS';}catch(err){try{const found=[];for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BIZI_FALLBACK}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const coords=coordsOf(st);if(!coords)continue;const n=st.bicisAvailable,k=st.anclajesAvailable;found.push({name:String(st.title??st.nombre??st.id),coords,available:n!=null&&Number.isFinite(+n)?+n:null,disabled:null,docks:k!=null&&Number.isFinite(+k)?+k:null})}if(batch.length<500)break}if(!found.length)throw Error('No municipal station data');state.stations=found;state.bikeSource='Municipal API (out-of-service status unknown)';}catch(e){state.bikeError=e.message;state.stations=[];state.bikeSource=''}}state.bikeFetched=Date.now();bikeMarkers();report()}
+async function loadBizi(force=false){if(!$('showBizi').checked)return;if(!force&&state.stations.length&&Date.now()-state.bikeFetched<60000){bikeMarkers();return}state.bikeError='';try{const feed=await getJson(BIZI_GBFS);const feeds=feed.data?.feeds||Object.values(feed.data||{}).find(x=>Array.isArray(x?.feeds))?.feeds||[];const info=feeds.find(x=>x.name==='station_information')?.url,status=feeds.find(x=>x.name==='station_status')?.url;if(!info||!status)throw Error('Missing GBFS feeds');const [i,s]=await Promise.all([getJson(info),getJson(status)]),statuses=new Map(asItems(s).map(a=>[String(a.station_id),a]));state.stations=asItems(i).map(x=>{const a=statuses.get(String(x.station_id))||{},n=a.num_vehicles_available??a.num_bikes_available,d=a.num_vehicles_disabled??a.num_bikes_disabled,k=a.num_docks_available;return {name:typeof x.name==='string'?x.name:String(x.station_id),coords:coordsOf(x),available:n!=null&&Number.isFinite(+n)?+n:null,disabled:d!=null&&Number.isFinite(+d)?+d:null,docks:k!=null&&Number.isFinite(+k)?+k:null}}).filter(x=>x.coords);if(!state.stations.length)throw Error('No station coordinates');state.bikeSource='GBFS';}catch(err){try{const found=[];for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BIZI_FALLBACK}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const coords=coordsOf(st);if(!coords)continue;const n=st.bicisDisponibles,k=st.anclajesDisponibles;found.push({name:String(st.title??st.nombre??st.id),coords,available:n!=null&&Number.isFinite(+n)?+n:null,disabled:null,docks:k!=null&&Number.isFinite(+k)?+k:null})}if(batch.length<500)break}if(!found.length)throw Error('No municipal station data');state.stations=found;state.bikeSource='Municipal API (out-of-service status unknown)';}catch(e){state.bikeError=e.message;state.stations=[];state.bikeSource=''}}state.bikeFetched=Date.now();bikeMarkers();report()}
 async function loadStops(force=false){if(!$('showBus').checked)return;if(!force&&state.stops.length&&Date.now()-state.busFetched<3600000){busMarkers();void loadVisibleBusETAs();return}try{const out=[],seen=new Set();for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BUS_API}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const id=stopId(st),coords=coordsOf(st);if(!id||!coords||seen.has(id))continue;seen.add(id);out.push({id,coords,name:String(st.title??st.nombre??st.name??id),arrivals:[],checked:0,apiResult:'pending'})}if(batch.length<500)break}if(!out.length)throw Error('No bus stops returned');state.stops=out;state.busFetched=Date.now();state.busError='';void loadVisibleBusETAs()}catch(e){state.busError=e.message;report()}}
 async function loadVisibleBusETAs(){if(state.busLoading){state.busReloadRequested=true;return}if(!state.map||!$('showBus').checked||state.map.getZoom()<12||!state.stops.length)return;state.busLoading=true;state.busReloadRequested=false;try{while($('showBus').checked&&state.map.getZoom()>=12){const now=Date.now(),bounds=state.map.getBounds().pad(.12),visible=state.stops.filter(x=>x.id.startsWith('tuzsa-')&&bounds.contains(x.coords)),pending=visible.filter(x=>now-x.checked>60000);if(!pending.length)break;const batch=pending.slice(0,48);report();await Promise.all(Array.from({length:6},async(_,worker)=>{for(let i=worker;i<batch.length;i+=6){const st=batch[i];try{let result;for(let attempt=0;attempt<2;attempt++){try{result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}.json`);break}catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,350))}}st.arrivals=parseBusLines(result);st.apiResult=st.arrivals.some(a=>a.minutes!==null)?'known':'unknown';st.checked=Date.now()}catch{st.arrivals=[];st.apiResult='error';st.checked=Date.now()-30000}}}));busMarkers();report();if(pending.length>48)await new Promise(resolve=>setTimeout(resolve,350))}}finally{state.busLoading=false;report();if(state.busReloadRequested){state.busReloadRequested=false;void loadVisibleBusETAs()}}}
 function refresh(force=false){if($('showBizi').checked)void loadBizi(force);else state.bl.clearLayers();if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}report()}
@@ -68,7 +91,146 @@ async function loadHistory(){
   status.textContent=rows.length?`${rows.length} snapshots recorded · from ${new Date(first).toLocaleString('en-GB')} to ${new Date(last).toLocaleString('en-GB')} · showing the latest ${recent.length}`:'No measurements yet. The first snapshot will appear after the scheduled workflow runs.';
  }catch(e){status.textContent='Could not load history: '+e.message}
 }
-function selectView(view){for(const button of document.querySelectorAll('[data-view]')){const active=button.dataset.view===view;button.classList.toggle('active',active);button.setAttribute('aria-current',active?'page':'false')}for(const name of ['map','stats','history','method'])$(name+'View').classList.toggle('hidden',name!==view);if(view==='map')requestAnimationFrame(()=>state.map?.invalidateSize());if(view==='history')void loadHistory();if(view==='stats')requestAnimationFrame(()=>{for(const chart of Object.values(state.charts))chart.resize()})}
-for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>selectView(b.dataset.view));$('refresh').addEventListener('click',()=>refresh(true));$('showBizi').addEventListener('change',()=>refresh(false));$('showBus').addEventListener('change',()=>refresh(false));$('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('showBizi').checked=true;bikeMarkers();if(!state.stations.length)void loadBizi()});
-initMap();refresh();setInterval(()=>{if(!document.hidden)refresh()},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh()});
-if(location.hostname==='localhost'||location.hostname==='127.0.0.1')window.__observatoryTest={state,refresh,loadVisibleBusETAs,selectView};
+
+function zaragozaToday(){
+ const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const value=kind=>parts.find(x=>x.type===kind)?.value;
+ return [value('year'),value('month'),value('day')].join('-');
+}
+function displayIncidentDate(value){
+ if(!value)return 'Not published';
+ const [year,month,day]=value.split('-');
+ return [day,month,year].join('/');
+}
+function incidentColor(type){return {traffic:'#e15d65',water:'#5188e2',major:'#d99236',other:'#7b8699'}[type]||'#7b8699'}
+function makeText(tag,content,className){
+ const el=document.createElement(tag);el.textContent=content;if(className)el.className=className;return el;
+}
+function renderIncidentMap(items){
+ if(!state.incidentMap)return;
+ state.incidentLayer.clearLayers();
+ const positions=[];
+ for(const issue of items){
+  if(!issue.coords)continue;
+  const marker=L.circleMarker(issue.coords,{radius:9,color:'#fff',weight:2,fillColor:incidentColor(issue.type),fillOpacity:.94});
+  const details=[[incidentTypes[issue.type]],['From: '+displayIncidentDate(issue.start)],['Planned until: '+displayIncidentDate(issue.end)]];
+  marker.bindPopup(popup(issue.title,details)).addTo(state.incidentLayer);
+  positions.push(issue.coords);
+ }
+ $('incidentMapCount').textContent=positions.length+' mapped';
+ if(positions.length&&!state.incidentMapFitted){
+  state.incidentMap.fitBounds(L.latLngBounds(positions).pad(.2),{maxZoom:13});
+  state.incidentMapFitted=true;
+ }
+}
+function initIncidentMap(){
+ if(state.incidentMap||!window.L)return;
+ state.incidentMap=L.map('incidentMap',{zoomControl:false}).setView([41.6488,-0.8891],12);
+ L.control.zoom({position:'bottomright'}).addTo(state.incidentMap);
+ L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.incidentMap);
+ state.incidentLayer=L.layerGroup().addTo(state.incidentMap);
+ renderIncidents();
+}
+function renderIncidents(){
+ const ready=Boolean(state.incidentFetched);
+ const today=zaragozaToday(),items=state.incidents;
+ const active=items.filter(x=>incidentPhase(x,today)==='active');
+ const upcoming=items.filter(x=>incidentPhase(x,today)==='upcoming');
+ renderMetricCards('incidentKpis',[
+  ['Active notices',ready?active.length:'—','Based on published start and end dates'],
+  ['Upcoming notices',ready?upcoming.length:'—','Future planned disruptions'],
+  ['Traffic closures',ready?active.filter(x=>x.type==='traffic').length:'—','Active notices only'],
+  ['Water outages',ready?active.filter(x=>x.type==='water').length:'—','Active notices only']
+ ]);
+ $('overviewIncidents').textContent=ready?active.length:'—';
+ if(!ready){$('incidentStatus').textContent=state.incidentError||'Loading official incident notices…';return}
+ const category=$('incidentType').value,phase=$('incidentPhase').value,term=$('incidentSearch').value.trim().toLocaleLowerCase();
+ const shown=items.filter(x=>(category==='all'||x.type===category)&&(phase==='all'||incidentPhase(x,today)===phase)&&(!term||(x.title+' '+x.street).toLocaleLowerCase().includes(term))).sort((a,b)=>a.title.localeCompare(b.title,'en'));
+ const total=state.incidentTotal;
+ $('incidentStatus').textContent=shown.length+' matching notices · '+items.length+(total>items.length?' of '+total:'')+' published records retrieved. Dates are planned, not confirmed completion times.';
+ $('incidentUpdated').textContent=state.incidentSource+' · checked '+new Date(state.incidentFetched).toLocaleString('en-GB')+(state.incidentError?' · Live source currently unavailable':'');
+ const list=$('incidentList');list.replaceChildren();
+ $('incidentListCount').textContent=shown.length+' notices';
+ if(!shown.length)list.append(makeText('p','No matching notices in the retrieved data.','empty-state'));
+ for(const issue of shown.slice(0,150)){
+  const card=document.createElement('article');card.className='incident-card';
+  const meta=document.createElement('div');meta.className='incident-tags';
+  const kind=makeText('span',incidentTypes[issue.type],'incident-type');kind.style.setProperty('--issue-color',incidentColor(issue.type));
+  meta.append(kind,makeText('span',({active:'Active today',upcoming:'Upcoming',ended:'Past',unknown:'Dates unavailable'})[incidentPhase(issue,today)],'incident-phase'));
+  card.append(meta,makeText('h3',issue.title));
+  if(issue.street&&issue.street!==issue.title)card.append(makeText('p',issue.street,'incident-address'));
+  card.append(makeText('p','From '+displayIncidentDate(issue.start)+' · Planned until '+displayIncidentDate(issue.end),'incident-dates'));
+  if(issue.link){const link=document.createElement('a');link.href=issue.link;link.target='_blank';link.rel='noopener noreferrer';link.textContent='View official notice ↗';card.append(link)}
+  list.append(card);
+ }
+ if(shown.length>150)list.append(makeText('p','Showing the first 150 matches. Narrow the filters to see more.','fineprint'));
+ renderIncidentMap(shown);
+}
+async function loadIncidents(force=false){
+ if(state.incidentLoading)return;
+ if(!force&&state.incidentFetched&&Date.now()-state.incidentFetched<300000){renderIncidents();return}
+ state.incidentLoading=true;state.incidentError='';
+ let data,source='Live City API',fetched=Date.now();
+ try{
+  data=await getJson(INCIDENT_API+'.json?rows=500&start=0&srsname=wgs84');
+  if(!Array.isArray(data?.result)&&!Array.isArray(data))throw Error('Unexpected municipal response');
+ }catch(err){
+  try{
+   data=await getJson('./history/incidents.json');
+   if(!data?.fetchedAt||!Array.isArray(data?.items))throw Error('No cached incident snapshot');
+   fetched=Date.parse(data.fetchedAt);
+   if(!Number.isFinite(fetched))throw Error('Invalid snapshot timestamp');
+   source='Saved municipal snapshot';state.incidentError=err.message;
+  }catch{state.incidentLoading=false;state.incidentError='Incident data is currently unavailable. Try again later.';renderIncidents();return}
+ }
+ const raw=Array.isArray(data)?data:data.result??data.items;
+ state.incidents=normalizeIncidents(raw);
+ state.incidentTotal=Number.isFinite(Number(data.totalCount))?Number(data.totalCount):raw.length;
+ state.incidentFetched=fetched;state.incidentSource=source;
+ state.incidentLoading=false;
+ renderIncidents();
+}
+function selectView(view){
+ const views=['overview','buses','bizi','incidents','history','method'];
+ if(!views.includes(view))view='overview';
+ for(const button of document.querySelectorAll('[data-view]')){
+  const active=button.dataset.view===view;
+  button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;
+ }
+ for(const name of views)$(name+'View').classList.toggle('hidden',name!==view);
+ if(['overview','buses','bizi'].includes(view)){
+  $(view+'MapHost').append($('mapWorkspace'));
+  $('mapTitle').textContent=view==='buses'?'Bus stops & predictions':view==='bizi'?'Bizi station availability':'Live service map';
+  $('showBus').checked=view!=='bizi';$('showBizi').checked=view!=='buses';
+  $('brokenOnly').checked=false;
+  refresh(false);
+  requestAnimationFrame(()=>{state.map?.invalidateSize();bikeMarkers();busMarkers();for(const chart of Object.values(state.charts))chart.resize()});
+ }else if(view==='incidents'){
+  void loadIncidents();
+  requestAnimationFrame(()=>{initIncidentMap();state.incidentMap?.invalidateSize();renderIncidents()});
+ }else if(view==='history'){
+  void loadHistory();
+  requestAnimationFrame(()=>{for(const chart of Object.values(state.charts))chart.resize()});
+ }
+ if(location.hash.slice(1)!==view)history.replaceState(null,'','#'+view);
+}
+for(const button of document.querySelectorAll('[data-view]')){
+ button.addEventListener('click',()=>selectView(button.dataset.view));
+ button.addEventListener('keydown',e=>{
+  if(!['ArrowRight','ArrowLeft','Home','End'].includes(e.key))return;
+  e.preventDefault();
+  const tabs=[...document.querySelectorAll('[data-view]')],index=tabs.indexOf(button);
+  const next=e.key==='Home'?0:e.key==='End'?tabs.length-1:(index+(e.key==='ArrowRight'?1:-1)+tabs.length)%tabs.length;
+  selectView(tabs[next].dataset.view);tabs[next].focus();
+ });
+}
+$('openIncidents').addEventListener('click',()=>selectView('incidents'));
+$('refresh').addEventListener('click',()=>refresh(true));
+$('showBizi').addEventListener('change',()=>refresh(false));
+$('showBus').addEventListener('change',()=>refresh(false));
+$('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('showBizi').checked=true;bikeMarkers();if(!state.stations.length)void loadBizi()});
+$('incidentRefresh').addEventListener('click',()=>void loadIncidents(true));
+for(const id of ['incidentType','incidentPhase','incidentSearch'])$(id).addEventListener(id==='incidentSearch'?'input':'change',renderIncidents);
+$('overviewMapHost').append($('mapWorkspace'));
+initMap();refresh();void loadIncidents();if(['overview','buses','bizi','incidents','history','method'].includes(location.hash.slice(1)))selectView(location.hash.slice(1));setInterval(()=>{if(!document.hidden){refresh();void loadIncidents()}},60000);document.addEventListener('visibilitychange',()=>{if(!document.hidden){refresh();void loadIncidents()}});
+if(location.hostname==='localhost'||location.hostname==='127.0.0.1')window.__observatoryTest={state,refresh,loadVisibleBusETAs,selectView,loadIncidents};
