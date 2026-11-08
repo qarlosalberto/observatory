@@ -52,7 +52,7 @@ jobs:
             playwright-report/
           retention-days: 7
   deploy:
-    needs: [validate]
+    needs: [validate, browser-e2e]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
