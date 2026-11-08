@@ -101,9 +101,10 @@ try{
   }));
  }
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
- if(errors===size){frame.bus.status='unavailable';snapshot.bus.error='All sampled bus arrival requests failed';}
+ if(errors===size)frame.bus.status='unavailable';
  snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
-  known,unknown,errors,estimates,over15:long,sampling:'rotating'};
+  known,unknown,errors,estimates,over15:long,sampling:'rotating',
+  ...(errors===size?{error:'All sampled bus arrival requests failed'}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
 
 try{
