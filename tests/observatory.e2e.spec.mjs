@@ -106,3 +106,11 @@ test('manual bus requests retry the documented extensionless endpoint after HTTP
  await page.locator('#liveButton').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.stops.some(s=>s.apiResult==='known')),{timeout:30000}).toBe(true);
 });
+
+test('Bizi stations with four available bikes use the yellow map marker',async({page})=>{
+ const calls=await setup(page);
+ await expect.poll(()=>page.locator('.bike-pin').evaluateAll(nodes=>nodes.some(node=>node.textContent.trim()==='4'&&node.style.getPropertyValue('--pin')==='#e9a52f'))).toBe(true);
+ await page.locator('[data-view="bizi"]').click();
+ await expect(page.locator('body')).toContainText('Bizi: 1–4 bikes');
+ expect(calls).toEqual([]);
+});

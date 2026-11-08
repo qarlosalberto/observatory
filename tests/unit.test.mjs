@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
  parseBusLines,minutesOf,stopId,summarizeBikes,summarizeBuses,
- incidentCoords,incidentPhase,normalizeIncidents,stationName,INCIDENT_API
+ incidentCoords,incidentPhase,normalizeIncidents,stationName,INCIDENT_API,BIZI_LOW_MAX
 } from '../site/data.js';
 
 test('each route retains its next arrival, including unavailable predictions',()=>{
@@ -69,4 +69,15 @@ test('GBFS multilingual labels and old invalid labels never render as objects',(
  assert.equal(stationName([{language:'es',text:'Plaza de España'},{language:'en',text:'Spain Square'}],'2'),'Spain Square');
  assert.equal(stationName([{language:'es',text:'Plaza de España'}],'2'),'Plaza de España');
  assert.equal(stationName('[object Object],[object Object]','2'),'2');
+});
+
+test('Bizi low-availability category includes four bikes but not five',()=>{
+ assert.equal(BIZI_LOW_MAX,4);
+ const stations=[null,0,1,2,3,4,5,8].map(available=>({available,disabled:null}));
+ const summary=summarizeBikes(stations);
+ assert.equal(summary.known,7);
+ assert.equal(summary.empty,1);
+ assert.equal(summary.low,4);
+ assert.equal(summary.good,2);
+ assert.equal(summary.available,23);
 });
