@@ -28,7 +28,26 @@ async function loadStops(force=false){if(!$('showBus').checked)return;if(!force&
 async function loadVisibleBusETAs(){if(state.busLoading){state.busReloadRequested=true;return}if(!state.map||!$('showBus').checked||state.map.getZoom()<12||!state.stops.length)return;state.busLoading=true;state.busReloadRequested=false;try{while($('showBus').checked&&state.map.getZoom()>=12){const now=Date.now(),bounds=state.map.getBounds().pad(.12),visible=state.stops.filter(x=>x.id.startsWith('tuzsa-')&&bounds.contains(x.coords)),pending=visible.filter(x=>now-x.checked>60000);if(!pending.length)break;const batch=pending.slice(0,48);report();await Promise.all(Array.from({length:6},async(_,worker)=>{for(let i=worker;i<batch.length;i+=6){const st=batch[i];try{let result;for(let attempt=0;attempt<2;attempt++){try{result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}.json`);break}catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,350))}}st.arrivals=parseBusLines(result);st.apiResult=st.arrivals.some(a=>a.minutes!==null)?'known':'unknown';st.checked=Date.now()}catch{st.arrivals=[];st.apiResult='error';st.checked=Date.now()-30000}}}));busMarkers();report();if(pending.length>48)await new Promise(resolve=>setTimeout(resolve,350))}}finally{state.busLoading=false;report();if(state.busReloadRequested){state.busReloadRequested=false;void loadVisibleBusETAs()}}}
 function refresh(force=false){if($('showBizi').checked)void loadBizi(force);else state.bl.clearLayers();if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}report()}
 function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
+async function loadBusRankings(){
+ const render=(id,items,type)=>{
+  const el=$(id);el.replaceChildren();
+  if(!items.length){el.textContent='Aún no hay suficientes mediciones para una clasificación fiable.';return}
+  const table=document.createElement('table');table.className='ranking-table';
+  const head=document.createElement('thead'),heading=document.createElement('tr');
+  for(const name of [type==='line'?'Línea':'Parada','Predicciones','>15 min','Porcentaje']){const th=document.createElement('th');th.textContent=name;heading.append(th)}
+  head.append(heading);table.append(head);const body=document.createElement('tbody');
+  for(const [name,v] of items){const tr=document.createElement('tr');for(const val of [name,v.samples,v.over15,(100*v.over15/v.samples).toFixed(1)+' %']){const td=document.createElement('td');td.textContent=val;tr.append(td)}body.append(tr)}
+  table.append(body);el.append(table);
+ };
+ try{
+  const data=await getJson('./history/bus-details.json');
+  const sorted=entries=>entries.filter(([,x])=>x.samples>=20).sort((a,b)=>b[1].over15/b[1].samples-a[1].over15/a[1].samples||b[1].samples-a[1].samples).slice(0,15);
+  render('lineRanking',sorted(Object.entries(data.lines||{})),'line');
+  render('stopRanking',sorted(Object.entries(data.stops||{}).map(([id,x])=>[id,{samples:x.estimates,over15:x.over15}])),'stop');
+ }catch(e){$('lineRanking').textContent='No se pudo cargar el ranking: '+e.message;$('stopRanking').textContent='No se pudo cargar el ranking.'}
+}
 async function loadHistory(){
+ void loadBusRankings();
  const status=$('historyStatus');
  try{
   const rows=await getJson('./history/snapshots.json');
