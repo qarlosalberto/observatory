@@ -53,7 +53,7 @@ try{const saved=JSON.parse(await readFile(output,'utf8'));if(Array.isArray(saved
 history.push(snapshot);
 history=history.filter(x=>x&&typeof x.at==='string'&&Date.parse(x.at)>=Date.now()-90*86400000).slice(-4500);
 await mkdir(dirname(output),{recursive:true});
-await writeFile(output,JSON.stringify(history,null,2)+'\\n'.replace('\\\\n','\\n'));
+await writeFile(output,JSON.stringify(history,null,2)+String.fromCharCode(10));
 // Aggregated by stop and line. Retains counts rather than personally identifying journeys.
 let detail={schema:1,updatedAt:now,stops:{},lines:{}};
 try{const existing=JSON.parse(await readFile(detailsOutput,'utf8'));if(existing?.schema===1&&existing.stops&&existing.lines)detail=existing}catch{}
@@ -70,5 +70,5 @@ for(const observation of observations){
  }
 }
 detail.updatedAt=now;
-await writeFile(detailsOutput,JSON.stringify(detail)+'\\n'.replace('\\\\n','\\n'));
+await writeFile(detailsOutput,JSON.stringify(detail)+String.fromCharCode(10));
 console.log(JSON.stringify(snapshot));
