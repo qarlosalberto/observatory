@@ -16,6 +16,16 @@ const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavail
 const observations=[];
 const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
 const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
+const stationName=(value,id)=>{
+ if(typeof value==='string'&&value.trim())return value.trim();
+ if(Array.isArray(value)){
+  const named=value.find(x=>x&&typeof x==='object'&&x.language==='en'&&typeof x.text==='string')
+   ??value.find(x=>x&&typeof x==='object'&&x.language==='es'&&typeof x.text==='string')
+   ??value.find(x=>x&&typeof x==='object'&&typeof x.text==='string');
+  if(named?.text?.trim())return named.text.trim();
+ }
+ return String(id);
+};
 const readJson=async(path,fallback)=>{try{return JSON.parse(await readFile(path,'utf8'))}catch{return fallback}};
 const saveJson=async(path,data)=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,JSON.stringify(data)+String.fromCharCode(10))};
 async function get(url){
@@ -39,7 +49,7 @@ try{
  const stations=asItems(infoData).map(x=>{
   const v=statuses.get(String(x.station_id))||{};
   const coords=coordinate(coordsOf(x));
-  return {id:String(x.station_id),name:String(x.name??x.station_id),coords,
+  return {id:String(x.station_id),name:stationName(x.name,x.station_id),coords,
    available:numeric(v.num_vehicles_available??v.num_bikes_available),
    disabled:numeric(v.num_vehicles_disabled??v.num_bikes_disabled),
    docks:numeric(v.num_docks_available)};
@@ -91,7 +101,8 @@ try{
   }));
  }
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
- snapshot.bus={status:'ok',population:discovered.length,sampled:size,
+ if(errors===size){frame.bus.status='unavailable';snapshot.bus.error='All sampled bus arrival requests failed';}
+ snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
   known,unknown,errors,estimates,over15:long,sampling:'rotating'};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
 
