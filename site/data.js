@@ -1,6 +1,6 @@
 export const BUS_API='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/transporte-urbano/poste-autobus';
 export const BIZI_GBFS='https://zaragoza.publicbikesystem.net/customer/gbfs/v3.0/gbfs.json';
-export const INCIDENT_API='https://www.zaragoza.es/sede/servicio/via-publica/incidencia';
+export const INCIDENT_API='https://www.zaragoza.es/sede/servicio/incidencia/via-publica';
 export const BIZI_FALLBACK='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/estacion-bicicleta';
 export const asItems = data => Array.isArray(data)?data:[data?.result,data?.results,data?.features,data?.data?.stations,data?.data?.items,data?.data?.results,data?.stations].find(Array.isArray)||[];
 export function coordsOf(obj){
