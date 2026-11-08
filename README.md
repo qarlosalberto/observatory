@@ -1,10 +1,11 @@
 # Observatory — Zaragoza
 
-Observatorio independiente de servicios públicos de Zaragoza: tiempos de próxima llegada por línea y disponibilidad Bizi, con estadísticas Chart.js y mapa Leaflet.
+An independent observatory of Zaragoza's public services, featuring bus arrival predictions and Bizi bike availability, with Chart.js statistics and a Leaflet map.
 
-**Sitio previsto:** https://qarlosalberto.github.io/observatory/
+**Website:** https://qarlosalberto.github.io/observatory/
 
-## Ejecutar localmente
+## Run locally
+
 ```sh
 npm install
 python3 -m http.server 4173 --directory site
@@ -12,15 +13,24 @@ npm test
 npm run test:e2e
 ```
 
-El workflow de GitHub Actions comprueba unitarias y E2E antes del despliegue a GitHub Pages. Configura **Settings → Pages → Build and deployment → GitHub Actions** si todavía no está seleccionado.
+GitHub Actions runs unit and end-to-end tests before deploying to GitHub Pages. If needed, configure **Settings → Pages → Build and deployment → GitHub Actions**.
 
-Las estadísticas reflejan instantáneas del estado recibido en la sesión. **Más de 15 minutos de espera no demuestra retraso respecto al horario**. Las averías de Bizi solo cuentan cuando el proveedor entrega ese dato, y los errores/tiempos desconocidos no se equiparan con cero.
+Live statistics reflect the latest API responses in the current session. **A predicted wait over 15 minutes does not prove that a bus is late against its timetable.** Out-of-service Bizi bikes are counted only when the provider reports that metric. Missing values and API failures are not treated as zero.
 
-My Places mantiene en su propio repositorio la gestión de lugares personales.
+My Places maintains personal place management in its own repository.
 
-## Histórico automático
-El workflow `.github/workflows/history.yml` intenta recoger datos cada 30 minutos (minutos 07 y 37 UTC) y admite ejecución manual desde GitHub Actions. El script `scripts/capture-history.mjs` escribe instantáneas en `site/history/snapshots.json`, que se conservan durante 90 días. Requiere permisos de escritura del `GITHUB_TOKEN` para guardar los commits en `main`; la programación de GitHub Actions puede sufrir retrasos o suspensiones.
+## Automated historical data
 
-Bizi: número de estaciones con disponibilidad conocida, vacías, bicicletas disponibles y unidades deshabilitadas cuando la fuente lo informa. Autobús: muestra rotatoria de hasta 60 paradas por ejecución, con predicciones conocidas, respuestas sin predicción, errores y esperas superiores a 15 minutos. **No es un censo completo de paradas ni una medición de puntualidad**. Los fallos de API no se consideran fallos del servicio. Los porcentajes de autobús se calculan sobre predicciones conocidas; no se deben comparar muestras sin comprobar su cobertura.
+The `.github/workflows/history.yml` workflow attempts to collect public-service snapshots every 30 minutes (at minutes 07 and 37 UTC), and can also be started manually through GitHub Actions. The `scripts/capture-history.mjs` script writes snapshots to `site/history/snapshots.json`, retaining up to 90 days. It also accumulates bus metrics by route and stop in `site/history/bus-details.json`.
 
-Para ejecutar manualmente desde una copia local: `node scripts/capture-history.mjs`. El histórico empieza vacío hasta que se ejecute una captura válida.
+The workflow needs `GITHUB_TOKEN` write permission to commit updates to `main`. GitHub Actions scheduled runs can be delayed or suspended.
+
+**Bizi metrics:** reporting stations, empty stations, available bikes, and out-of-service bikes when reported.
+
+**Bus metrics:** a rotating sample of up to 60 stops per run, including known predictions, responses without predictions, API errors, and predictions over 15 minutes. Route and stop rankings require at least 20 known predictions. This is **not a complete census of stops or a punctuality measurement**. API failures do not count as service failures. Percentages use only known predictions and must be interpreted alongside sampling coverage.
+
+Run the collector manually from the repository root with `node scripts/capture-history.mjs`. Historical files start empty until a successful collection.
+
+## Language policy
+
+All repository documentation, UI labels, developer-facing messages, and new code comments should be written in English. External API field names and official Spanish identifiers must remain unchanged where required for compatibility.
