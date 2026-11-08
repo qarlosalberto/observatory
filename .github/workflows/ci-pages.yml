@@ -13,7 +13,26 @@ concurrency:
   group: observatory-pages
   cancel-in-progress: true
 jobs:
-  test:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Unit tests
+        run: npm test
+      - name: Validate deployable static assets
+        run: |
+          test -s site/index.html
+          test -s site/app.js
+          test -s site/data.js
+          test -s site/style.css
+          node --check site/app.js
+          node --check site/data.js
+          grep -q '<script type="module" src="./app.js"' site/index.html
+  browser-e2e:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -22,7 +41,6 @@ jobs:
         with:
           node-version: '22'
       - run: npm install --no-audit --no-fund
-      - run: npm test
       - run: npx playwright install --with-deps chromium
       - run: npm run test:e2e
       - uses: actions/upload-artifact@v4
@@ -34,7 +52,7 @@ jobs:
             playwright-report/
           retention-days: 7
   deploy:
-    needs: [test]
+    needs: [validate]
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     environment:
