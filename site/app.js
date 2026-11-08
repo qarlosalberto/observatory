@@ -280,25 +280,40 @@ async function loadIncidents(force=false){
  if(state.incidentLoading)return;
  if(!force&&state.incidentFetched&&Date.now()-state.incidentFetched<300000){renderIncidents();return}
  state.incidentLoading=true;state.incidentError='';
- let data,source='Live City API',fetched=Date.now();
+ let data,source='Saved municipal snapshot',fetched=Date.now();
  try{
-  data=await getJson(INCIDENT_API+'.json?rows=500&start=0&srsname=wgs84');
-  if(!Array.isArray(data?.result)&&!Array.isArray(data))throw Error('Unexpected municipal response');
- }catch(err){
-  try{
+  if(force){
+   data=await getJson(INCIDENT_API+'.json?rows=500&start=0&srsname=wgs84');
+   if(!Array.isArray(data?.result)&&!Array.isArray(data))throw Error('Unexpected municipal response');
+   source='On-demand live municipal API';
+  }else{
    data=await getJson('./history/incidents.json');
-   if(!data?.fetchedAt||!Array.isArray(data?.items))throw Error('No cached incident snapshot');
+   if(!data?.fetchedAt||!Array.isArray(data.items))throw Error('No completed incident snapshot yet');
    fetched=Date.parse(data.fetchedAt);
    if(!Number.isFinite(fetched))throw Error('Invalid snapshot timestamp');
-   source='Saved municipal snapshot';state.incidentError=err.message;
-  }catch{state.incidentLoading=false;state.incidentError='Incident data is currently unavailable. Try again later.';renderIncidents();return}
+  }
+ }catch(err){
+  if(force){
+   try{
+    data=await getJson('./history/incidents.json');
+    if(!data?.fetchedAt||!Array.isArray(data.items))throw Error('No saved incident notices');
+    fetched=Date.parse(data.fetchedAt);
+    if(!Number.isFinite(fetched))throw Error('Invalid snapshot timestamp');
+    state.incidentError='Live API unavailable; showing saved notices';
+   }catch{
+    state.incidentError='No incident notices available. The live API request failed and no completed snapshot exists.';
+    state.incidentLoading=false;renderIncidents();return;
+   }
+  }else{
+   state.incidentError='Awaiting a completed municipal incident snapshot. You may request live data manually.';
+   state.incidentLoading=false;renderIncidents();return;
+  }
  }
  const raw=Array.isArray(data)?data:data.result??data.items;
  state.incidents=normalizeIncidents(raw);
  state.incidentTotal=Number.isFinite(Number(data.totalCount))?Number(data.totalCount):raw.length;
  state.incidentFetched=fetched;state.incidentSource=source;
- state.incidentLoading=false;
- renderIncidents();
+ state.incidentLoading=false;renderIncidents();
 }
 function selectView(view){
  const views=['overview','buses','bizi','incidents','history','method'];
