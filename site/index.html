@@ -1,25 +1,94 @@
 <!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><meta name="theme-color" content="#15385a">
-<title>Observatory · Zaragoza Public Services</title>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101e35">
+<meta name="description" content="An independent, transparent view of Zaragoza's buses, Bizi bikes and public-space incidents.">
+<title>Observatory — Zaragoza Public Services</title>
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="./style.css">
 <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script defer src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
 <script type="module" src="./app.js"></script>
-</head><body>
-<header class="header"><div class="brand"><div class="brand-mark" aria-hidden="true">◎</div><div><strong>Observatory</strong><small>Zaragoza · Public Services Observatory</small></div></div><span class="live-tag">Public data · live status</span></header>
+</head>
+<body>
+<header class="header">
+  <div class="header-inner">
+    <div class="brand"><div class="brand-mark" aria-hidden="true">◈</div><div><strong>observatory<span class="brand-dot">.</span></strong><small>ZARAGOZA · PUBLIC SERVICES</small></div></div>
+    <div class="header-meta"><span class="header-location"><span class="location-dot" aria-hidden="true"></span>Zaragoza, Spain</span><span class="live-tag">Independent data monitor</span></div>
+  </div>
+</header>
 <main>
-<section class="intro"><p class="eyebrow">URBAN MOBILITY · ZARAGOZA</p><h1>How are Zaragoza's public services performing?</h1><p>Bizi bike availability and upcoming bus arrivals, with transparent data coverage and missing-data reporting. A snapshot of service conditions, not a historical punctuality assessment.</p></section>
-<nav class="view-tabs" aria-label="Observatory sections"><button type="button" class="active" data-view="map" aria-current="page">Map</button><button type="button" data-view="stats">Statistics</button><button type="button" data-view="history">History</button><button type="button" data-view="method">Methodology</button></nav>
-<section id="mapView" class="view" aria-labelledby="mapTitle"><div class="panel-heading"><div><h2 id="mapTitle">Service map</h2><p>Choose map layers or filter stations with out-of-service bikes.</p></div><button type="button" id="refresh" class="primary">↻ Refresh</button></div>
-<div class="toolbar"><fieldset class="layers"><legend>Layers</legend><label><input id="showBus" type="checkbox" checked> Bus</label><label><input id="showBizi" type="checkbox" checked> Bizi</label></fieldset><label class="broken-filter"><input id="brokenOnly" type="checkbox"> Only stations with out-of-service bikes</label></div>
-<div id="map" role="region" aria-label="Map of Bizi stations and bus stops with arrival predictions"></div>
-<div class="legend"><span><i style="--c:#18875b"></i>Bizi ≥3</span><span><i style="--c:#e9a52f"></i>Bizi 1–2</span><span><i style="--c:#d94749"></i>Bizi 0 / Bus &gt;15 min</span><span><i style="--c:#4274c7"></i>Bus ≤15 min</span><span><i style="--c:#89929f"></i>Bizi unknown</span></div>
-<p id="status" role="status" aria-live="polite" class="status">Loading public data sources…</p><p class="fineprint">Bus stops are shown only when at least one route has a valid next-arrival estimate. A long wait does not necessarily indicate a timetable delay.</p></section>
-<section id="statsView" class="view hidden" aria-labelledby="statsTitle"><div class="panel-heading"><div><h2 id="statsTitle">Service indicators</h2><p>Only values confirmed by API responses.</p></div><span id="updated" class="timestamp">Not updated</span></div><div id="kpis" class="kpis"></div>
-<div class="charts"><article class="chart-card"><h3>Availability by Bizi station</h3><div class="chart-wrap"><canvas id="bikeChart" aria-label="Stations by number of available bikes"></canvas></div><p id="bikeNote" class="note"></p></article><article class="chart-card"><h3>Available and out-of-service bikes</h3><div class="chart-wrap"><canvas id="faultChart" aria-label="Available versus out-of-service bikes"></canvas></div><p id="faultNote" class="note"></p></article><article class="chart-card"><h3>Next bus arrival by route</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Upcoming arrivals by route"></canvas></div><p id="busNote" class="note"></p></article></div>
-</section>
-<section id="historyView" class="view hidden" aria-labelledby="historyTitle"><div class="panel-heading"><div><h2 id="historyTitle">Historical trends</h2><p>Automatic snapshots · coverage and errors included</p></div></div><p id="historyStatus" role="status" class="status">Loading history…</p><div class="charts"><article class="chart-card"><h3>Empty Bizi stations</h3><div class="chart-wrap"><canvas id="historyBiziChart"></canvas></div></article><article class="chart-card"><h3>Bus predictions over 15 min (%)</h3><div class="chart-wrap"><canvas id="historyBusChart"></canvas></div></article><article class="chart-card"><h3>Bus API request errors</h3><div class="chart-wrap"><canvas id="historyErrorsChart"></canvas></div></article></div><h3>Historical ranking by route</h3><p class="fineprint">Ranked by the share of predictions over 15 minutes. At least 20 known predictions are required.</p><div id="lineRanking" class="ranking" aria-live="polite">No route-level data yet.</div><h3>Stops with recurring long waits</h3><div id="stopRanking" class="ranking" aria-live="polite">No stop-level data yet.</div><p class="fineprint">Bus stops are sampled on a rotating basis: each snapshot covers only part of the network. A prediction over 15 minutes is not proof of lateness. Percentages exclude responses without a prediction and must be interpreted alongside sample coverage.</p></section>
-<section id="methodView" class="view hidden" aria-labelledby="methodTitle"><h2 id="methodTitle">Methodology and limitations</h2><div class="method-copy"><p><strong>Sources.</strong> Zaragoza City Council public data for bus stops and predictions, plus Bizi GBFS with a municipal station-data fallback.</p><p><strong>Bus routes.</strong> Each stop stores the next predicted arrival for each route separately. A stop appears red if any known prediction exceeds 15 minutes, or blue if all known predictions are at most 15 minutes. Stops without valid predictions are hidden.</p><p><strong>Out-of-service bikes.</strong> Bikes are counted as out of service only when the provider reports that number. Missing values are unknown, not zero. Comparisons use stations reporting both available and out-of-service counts.</p><p><strong>Coverage.</strong> The map queries visible bus stops at zoom level 12 or higher, in batches. Total stops, queried stops, and stops with predictions are different populations. Coverage matters when interpreting percentages.</p><p><strong>Live and historical data.</strong> Live charts reflect the latest session responses. The scheduled collector attempts snapshots every 30 minutes, retains up to 90 days of snapshots, and samples up to 60 rotating bus stops per run. This is not a simultaneous census of all stops. A predicted wait over 15 minutes does not prove a timetable violation; scheduled timetables would be needed to measure lateness.</p></div></section>
-</main><footer>Observatory · Independent project · Third-party data subject to availability and CORS</footer></body></html>
+  <section class="intro" aria-labelledby="pageTitle">
+    <div class="intro-copy"><p class="eyebrow"><span class="eyebrow-line"></span> OPEN DATA / CITY INTELLIGENCE</p><h1 id="pageTitle">A clearer picture of <em>your city.</em></h1><p>Explore buses, shared bikes and public-space disruptions in Zaragoza. Grounded in published data, with uncertainty shown instead of hidden.</p><div class="intro-links"><span class="intro-chip">Independent observatory</span><span class="intro-chip">Transparent methodology</span></div></div>
+    <div class="intro-stats" aria-label="Quick service summary">
+      <div class="hero-stat"><span>Bus predictions</span><strong id="overviewBus">—</strong><small>Live observations</small></div>
+      <div class="hero-stat"><span>Bizi bikes available</span><strong id="overviewBike">—</strong><small>Provider-reported</small></div>
+      <div class="hero-stat"><span>Active street notices</span><strong id="overviewIncidents">—</strong><small>Published incidents</small></div>
+    </div>
+  </section>
+  <nav class="view-tabs" role="tablist" aria-label="Observatory sections">
+    <button type="button" role="tab" id="tab-overview" aria-controls="overviewView" aria-selected="true" tabindex="0" class="active" data-view="overview"><span class="tab-icon" aria-hidden="true">◈</span>Overview</button>
+    <button type="button" role="tab" id="tab-buses" aria-controls="busesView" aria-selected="false" tabindex="-1" data-view="buses"><span class="tab-icon" aria-hidden="true">◉</span>Buses</button>
+    <button type="button" role="tab" id="tab-bizi" aria-controls="biziView" aria-selected="false" tabindex="-1" data-view="bizi"><span class="tab-icon" aria-hidden="true">◌</span>Bizi</button>
+    <button type="button" role="tab" id="tab-incidents" aria-controls="incidentsView" aria-selected="false" tabindex="-1" data-view="incidents"><span class="tab-icon" aria-hidden="true">⚑</span>Incidents</button>
+    <button type="button" role="tab" id="tab-history" aria-controls="historyView" aria-selected="false" tabindex="-1" data-view="history"><span class="tab-icon" aria-hidden="true">▥</span>History</button>
+    <button type="button" role="tab" id="tab-method" aria-controls="methodView" aria-selected="false" tabindex="-1" data-view="method"><span class="tab-icon" aria-hidden="true">ⓘ</span>Methodology</button>
+  </nav>
+  <section id="overviewView" class="view" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">AT A GLANCE</p><h2>City service overview</h2><p>Live measurements, not a claim of timetable punctuality.</p></div><span class="timestamp" id="updated">Not updated</span></div>
+    <div id="kpis" class="kpis"></div>
+    <div class="section-divider"><span>LIVE MAP</span><span>Zoom in to inspect individual stops</span></div>
+    <div id="overviewMapHost"></div>
+    <div class="overview-cta"><div><strong>Street works, closures and disruptions</strong><p>See dates, locations and categories from the city’s official notices.</p></div><button type="button" id="openIncidents" class="secondary">Explore incidents <span aria-hidden="true">↗</span></button></div>
+  </section>
+  <section id="busesView" class="view hidden" role="tabpanel" aria-labelledby="tab-buses" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">PUBLIC TRANSPORT</p><h2>Bus network</h2><p>Next-arrival predictions at stops within the visible map area.</p></div><span class="section-pill">Live API</span></div>
+    <div id="busKpis" class="kpis"></div>
+    <div class="charts single-chart"><article class="chart-card"><h3>Predicted wait distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Predicted waiting times by route"></canvas></div><p id="busNote" class="note"></p></article></div>
+    <div class="section-divider"><span>BUS MAP</span><span>Select any visible stop to inspect routes</span></div>
+    <div id="busesMapHost"></div>
+    <p class="fineprint">A prediction exceeding 15 minutes is a long predicted wait, not evidence that a bus is running late.</p>
+  </section>
+  <section id="biziView" class="view hidden" role="tabpanel" aria-labelledby="tab-bizi" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Live API</span></div>
+    <div id="biziKpis" class="kpis"></div>
+    <div class="charts two-charts"><article class="chart-card"><h3>Station availability</h3><div class="chart-wrap"><canvas id="bikeChart" aria-label="Stations by available bike count"></canvas></div><p id="bikeNote" class="note"></p></article><article class="chart-card"><h3>Available vs. out of service</h3><div class="chart-wrap"><canvas id="faultChart" aria-label="Available and out-of-service bikes"></canvas></div><p id="faultNote" class="note"></p></article></div>
+    <div class="section-divider"><span>BIZI MAP</span><span>Station availability at a glance</span></div>
+    <div id="biziMapHost"></div>
+    <p class="fineprint">Missing out-of-service values are unknown, not zero. Comparisons use only stations with both fields reported.</p>
+  </section>
+  <div id="mapWorkspace" class="map-workspace">
+    <div class="map-toolbar"><div class="map-toolbar-title"><strong id="mapTitle">Live service map</strong><small>Official source data, refreshed periodically</small></div><button type="button" id="refresh" class="primary"><span aria-hidden="true">↻</span> Refresh</button></div>
+    <div class="toolbar"><fieldset class="layers"><legend>MAP LAYERS</legend><label><input id="showBus" type="checkbox" checked> Buses</label><label><input id="showBizi" type="checkbox" checked> Bizi</label></fieldset><label class="broken-filter"><input id="brokenOnly" type="checkbox"> Show stations with reported issues only</label></div>
+    <div id="map" role="region" aria-label="Interactive map of Bizi stations and bus arrival predictions"></div>
+    <div class="legend"><span><i style="--c:#13865d"></i>Bizi: 3+ bikes</span><span><i style="--c:#f1aa41"></i>Bizi: 1–2 bikes</span><span><i style="--c:#e25c61"></i>Bizi empty / bus &gt;15 min</span><span><i style="--c:#5188e2"></i>Bus ≤15 min</span><span><i style="--c:#89929f"></i>Unknown Bizi</span></div>
+    <p id="status" role="status" aria-live="polite" class="status">Loading public data sources…</p>
+  </div>
+  <section id="incidentsView" class="view hidden" role="tabpanel" aria-labelledby="tab-incidents" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">STREET &amp; INFRASTRUCTURE</p><h2>Public-space incidents</h2><p>Traffic closures, water outages and major street disruptions published by Zaragoza City Council.</p></div><button type="button" class="primary" id="incidentRefresh"><span aria-hidden="true">↻</span> Refresh</button></div>
+    <div class="source-strip"><span class="source-dot" aria-hidden="true"></span><span id="incidentUpdated">Retrieving official notices…</span><a href="https://www.zaragoza.es/sede/servicio/via-publica/incidencia" target="_blank" rel="noopener noreferrer">Municipal source ↗</a></div>
+    <div id="incidentKpis" class="kpis"></div>
+    <div class="incident-filters"><label>Category<select id="incidentType"><option value="all">All categories</option><option value="traffic">Traffic closures</option><option value="water">Water supply outages</option><option value="major">Major disruptions</option><option value="other">Other</option></select></label><label>Timing<select id="incidentPhase"><option value="active">Active today</option><option value="upcoming">Upcoming</option><option value="ended">Past notices</option><option value="unknown">Date not specified</option><option value="all">All notices</option></select></label><label class="search-label">Find a street<input id="incidentSearch" type="search" placeholder="Search by street or title…" autocomplete="off"></label></div>
+    <div id="incidentStatus" role="status" aria-live="polite" class="status">Loading incident notices…</div>
+    <div class="incident-layout"><div class="incident-map-panel"><div class="section-divider"><span>NOTICE LOCATIONS</span><span id="incidentMapCount">—</span></div><div id="incidentMap" aria-label="Map of published street incidents"></div><p class="fineprint">Pins are approximate published locations. A notice is not necessarily a fault or a citizen complaint.</p></div><div class="incident-list-panel"><div class="section-divider"><span>OFFICIAL NOTICES</span><span id="incidentListCount">—</span></div><div id="incidentList" class="incident-list" aria-live="polite"></div></div></div>
+    <p class="fineprint incident-caveat">Active and upcoming classifications use the municipality’s published start and planned end dates, not confirmed resolution timestamps. Official notice details may be available in Spanish at the source.</p>
+  </section>
+  <section id="historyView" class="view hidden" role="tabpanel" aria-labelledby="tab-history" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">CHANGE OVER TIME</p><h2>Historical observations</h2><p>Scheduled snapshots include API coverage, missing predictions and errors.</p></div><span class="section-pill">30-minute capture target</span></div>
+    <p id="historyStatus" role="status" class="status">Loading history…</p>
+    <div class="charts"><article class="chart-card"><h3>Empty Bizi stations</h3><div class="chart-wrap"><canvas id="historyBiziChart"></canvas></div></article><article class="chart-card"><h3>Bus predictions over 15 min (%)</h3><div class="chart-wrap"><canvas id="historyBusChart"></canvas></div></article><article class="chart-card"><h3>Bus API request errors</h3><div class="chart-wrap"><canvas id="historyErrorsChart"></canvas></div></article></div>
+    <div class="section-divider"><span>ROUTE AND STOP DETAIL</span><span>Minimum 20 known predictions</span></div>
+    <div class="ranking-grid"><div><h3>Routes with longer observed waits</h3><div id="lineRanking" class="ranking" aria-live="polite">No route-level data yet.</div></div><div><h3>Stops with longer observed waits</h3><div id="stopRanking" class="ranking" aria-live="polite">No stop-level data yet.</div></div></div>
+    <p class="fineprint">Bus observations are drawn from rotating samples, not a simultaneous citywide census. Waits above 15 minutes do not prove lateness. Rankings should be interpreted alongside coverage and sample sizes.</p>
+  </section>
+  <section id="methodView" class="view hidden" role="tabpanel" aria-labelledby="tab-method" tabindex="0">
+    <div class="panel-heading"><div><p class="section-kicker">HOW TO READ THIS DATA</p><h2>Methodology &amp; limitations</h2><p>Every metric should be reproducible and clearly labeled.</p></div></div>
+    <div class="method-grid"><article class="method-card"><span class="method-index">01</span><h3>Official inputs</h3><p>Bus predictions and public-space notices are provided by Zaragoza City Council. Bizi uses the GBFS provider feed, with a municipal station fallback.</p></article><article class="method-card"><span class="method-index">02</span><h3>Coverage over certainty</h3><p>Missing predictions, unknown bike conditions and API errors remain separate from measured values. We never interpret missing values as zero.</p></article><article class="method-card"><span class="method-index">03</span><h3>Bus observations</h3><p>Visible stops are queried at zoom 12 or higher. A predicted wait longer than 15 minutes is not proof of a scheduled delay. Historical bus sampling rotates through up to 60 stops per capture.</p></article><article class="method-card"><span class="method-index">04</span><h3>Street incidents</h3><p>Published start and planned end dates determine whether a notice is current, upcoming or past. They are not proof of actual incident resolution or repair time. Categories are translated, while original notices remain linked.</p></article><article class="method-card"><span class="method-index">05</span><h3>History and freshness</h3><p>Scheduled GitHub Actions attempts a snapshot every 30 minutes and retains up to 90 days. Scheduled executions and upstream APIs may be delayed or unavailable.</p></article><article class="method-card"><span class="method-index">06</span><h3>More datasets</h3><p>Air quality, parking and urban infrastructure are candidates for future integration. They will only become live sections after their endpoints and update frequency are verified.</p></article></div>
+    <div class="source-links"><a href="https://www.zaragoza.es/sede/portal/datos-abiertos/api" target="_blank" rel="noopener noreferrer">Zaragoza Open Data API ↗</a><a href="https://www.zaragoza.es/sede/servicio/via-publica/incidencia" target="_blank" rel="noopener noreferrer">Published street incidents ↗</a><a href="https://github.com/qarlosalberto/observatory" target="_blank" rel="noopener noreferrer">Project source code ↗</a></div>
+  </section>
+</main>
+<footer><span><strong>observatory.</strong> Zaragoza</span><span>Independent public-data project · No official municipal affiliation</span></footer>
+</body>
+</html>
