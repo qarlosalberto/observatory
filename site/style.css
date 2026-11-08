@@ -229,3 +229,7 @@ footer strong{color:#344e67}
  .timeline-coverage{order:3;flex-basis:100%}
  .timeline-live{margin-left:auto}
 }
+
+.timeline-scale{display:flex;justify-content:space-between;gap:14px;margin:-12px 0 14px;color:#91b5c8;font-size:10px;font-variant-numeric:tabular-nums}
+.timeline-scale span:last-child{text-align:right}
+@media(max-width:690px){.timeline-scale{font-size:9px}.timeline-scale span{max-width:49%}}
