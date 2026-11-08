@@ -1,9 +1,10 @@
 // Scheduled public-data snapshots. Never treat unavailable data as zero.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
-import {BUS_API,BIZI_GBFS,asItems,stopId,parseBusLines} from '../site/data.js';
+import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,stopId,parseBusLines} from '../site/data.js';
 const output='site/history/snapshots.json';
 const detailsOutput='site/history/bus-details.json';
+const incidentOutput='site/history/incidents.json';
 let observations=[];
 const get=async url=>{const response=await fetch(url,{signal:AbortSignal.timeout(18000),headers:{accept:'application/json'}});if(!response.ok)throw Error('HTTP '+response.status);return response.json()};
 const now=new Date().toISOString();
@@ -48,6 +49,19 @@ try{
  }
  snapshot.bus={status:'ok',population:stops.length,sampled:sample.length,known,unknown,errors,estimates,over15:long,sampling:'rotating'};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,120)}
+try{
+ const data=await get(`${INCIDENT_API}.json?rows=500&start=0&srsname=wgs84`);
+ if(!Array.isArray(data?.result))throw Error('Unexpected incident API response');
+ const entries=data.result.map(x=>({
+  id:x.id,title:x.title,calle:x.calle,tipo:{id:x.tipo?.id},
+  inicio:x.inicio,fin:x.fin,lastUpdated:x.lastUpdated,
+  geometry:x.geometry,uri:x.uri
+ }));
+ const totalCount=Number.isFinite(Number(data.totalCount))?Number(data.totalCount):entries.length;
+ if(totalCount>0&&!entries.length)throw Error('Incident API returned no records');
+ await writeFile(incidentOutput,JSON.stringify({fetchedAt:now,totalCount,items:entries})+String.fromCharCode(10));
+ snapshot.incidents={status:'ok',fetched:entries.length,totalCount};
+}catch(e){snapshot.incidents={status:'unavailable',error:String(e.message).slice(0,120)}}
 let history=[];
 try{const saved=JSON.parse(await readFile(output,'utf8'));if(Array.isArray(saved))history=saved}catch{}
 history.push(snapshot);
