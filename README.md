@@ -1,8 +1,42 @@
 # Observatory — Zaragoza
 
-An independent observatory of Zaragoza's public services, featuring bus arrival predictions and Bizi bike availability, with Chart.js statistics and a Leaflet map.
+An independent public-data dashboard for Zaragoza, with a responsive English-language interface and six sections: **Overview, Buses, Bizi, Incidents, History and Methodology**.
 
 **Website:** https://qarlosalberto.github.io/observatory/
+
+## Recorded-first experience
+
+The website displays the **most recent precomputed observation by default**, not a new live fetch. This avoids forcing every visitor to wait for dozens of upstream requests. The fast initial data file is `site/history/latest.json`.
+
+A draggable slider on the service map reads `site/history/timeline.json` and displays the measurements actually recorded at each timestamp. Spatial observations are retained for **seven days**. Individual frames represent the sampled bus stops at that capture time; they do **not** reconstruct unobserved stops or interpolate arrival times. The date and coverage of each data source are shown explicitly.
+
+The **Fetch live data** button is an optional, on-demand action. It is never automatically invoked on initial page load. Selecting the latest capture returns to the saved measurements.
+
+The incident browser loads `site/history/incidents.json` by default. Users can explicitly request a live refresh. Municipal notice dates indicate published/planned start and end dates, not verified resolution timestamps.
+
+## Data collection
+
+The `.github/workflows/history.yml` GitHub Actions workflow attempts collection every 30 minutes (at minutes 07 and 37 UTC), and can also be run manually. Its collector, `scripts/capture-history.mjs`, creates:
+
+| Data file | Purpose | Retention |
+| --- | --- | --- |
+| `site/history/latest.json` | Latest successful available bus/Bizi capture for fast page loading | Latest per source, preserving original capture time |
+| `site/history/timeline.json` | Actual station and sampled stop positions/values per recording | Up to 7 days / 336 frames |
+| `site/history/snapshots.json` | Network-level historical coverage and aggregates | Up to 90 days |
+| `site/history/bus-details.json` | Cumulative per-route and per-stop observation counts | Cumulative |
+| `site/history/incidents.json` | Most recently retrieved municipal street notices | Latest completed capture |
+
+Scheduled collection requires `GITHUB_TOKEN` permission to write to `main` and GitHub Pages deployment permissions. The collection workflow **publishes the generated site directly**, because commits pushed using `GITHUB_TOKEN` do not trigger a subsequent GitHub Actions push workflow.
+
+Scheduled jobs may run late or be suspended. All initially empty files remain empty until the first successful capture; missing readings must not be presented as zeros or as fresh live data.
+
+### Source definitions and interpretation
+
+- **Bizi:** GBFS station information and status, or the municipal station API for on-demand fallback. Missing out-of-service counts are unknown, not zero.
+- **Buses:** Zaragoza City Council bus stops and next-arrival predictions. The collector rotates through up to 60 stops per capture to limit load. The sample is not a simultaneous census of the whole network. A predicted wait over 15 minutes is **not proof of timetable lateness**.
+- **Incidents:** Zaragoza City Council's public-space incidence API. Categories include water outages, traffic closures and major disruptions. Date filters are based on published intended intervals, not confirmed completion. The original official notice is linked where its URL is available.
+
+The **History** section shows aggregated trends and route/stop rankings with at least 20 known predictions; sample sizes and API failures remain explicit.
 
 ## Run locally
 
@@ -13,24 +47,14 @@ npm test
 npm run test:e2e
 ```
 
-GitHub Actions runs unit and end-to-end tests before deploying to GitHub Pages. If needed, configure **Settings → Pages → Build and deployment → GitHub Actions**.
+To capture an actual snapshot from the local checkout (requires connectivity to the external APIs):
 
-Live statistics reflect the latest API responses in the current session. **A predicted wait over 15 minutes does not prove that a bus is late against its timetable.** Out-of-service Bizi bikes are counted only when the provider reports that metric. Missing values and API failures are not treated as zero.
+```sh
+node scripts/capture-history.mjs
+```
 
-My Places maintains personal place management in its own repository.
-
-## Automated historical data
-
-The `.github/workflows/history.yml` workflow attempts to collect public-service snapshots every 30 minutes (at minutes 07 and 37 UTC), and can also be started manually through GitHub Actions. The `scripts/capture-history.mjs` script writes snapshots to `site/history/snapshots.json`, retaining up to 90 days. It also accumulates bus metrics by route and stop in `site/history/bus-details.json`.
-
-The workflow needs `GITHUB_TOKEN` write permission to commit updates to `main`. GitHub Actions scheduled runs can be delayed or suspended.
-
-**Bizi metrics:** reporting stations, empty stations, available bikes, and out-of-service bikes when reported.
-
-**Bus metrics:** a rotating sample of up to 60 stops per run, including known predictions, responses without predictions, API errors, and predictions over 15 minutes. Route and stop rankings require at least 20 known predictions. This is **not a complete census of stops or a punctuality measurement**. API failures do not count as service failures. Percentages use only known predictions and must be interpreted alongside sampling coverage.
-
-Run the collector manually from the repository root with `node scripts/capture-history.mjs`. Historical files start empty until a successful collection.
+The `.github/workflows/ci-pages.yml` workflow runs unit and end-to-end browser tests and deploys code changes to GitHub Pages only after both succeed. In the repository settings, use **Settings → Pages → Build and deployment → GitHub Actions**.
 
 ## Language policy
 
-All repository documentation, UI labels, developer-facing messages, and new code comments should be written in English. External API field names and official Spanish identifiers must remain unchanged where required for compatibility.
+Repository documentation, UI labels, accessibility strings, developer-facing errors, test descriptions and new code comments are written in **English**. Official external API field names, identifier patterns, and Spanish input strings must remain unchanged wherever necessary for source compatibility.
