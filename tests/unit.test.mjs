@@ -1,24 +1,63 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {parseBusLines,minutesOf,stopId,summarizeBikes,summarizeBuses} from '../site/data.js';
+import {
+ parseBusLines,minutesOf,stopId,summarizeBikes,summarizeBuses,
+ incidentCoords,incidentPhase,normalizeIncidents
+} from '../site/data.js';
 
-test('cada línea conserva su próxima llegada, incluidas las líneas desconocidas',()=>{
- assert.deepEqual(parseBusLines({destinos:[{linea:'23',primero:'6 min',segundo:'28 min'},{linea:'35',primero:'22 minutos',segundo:'40 min'},{linea:'40',primero:'Sin información'}]}),[{line:'23',minutes:6},{line:'35',minutes:22},{line:'40',minutes:null}]);
+test('each route retains its next arrival, including unavailable predictions',()=>{
+ assert.deepEqual(parseBusLines({destinos:[
+  {linea:'23',primero:'6 min',segundo:'28 min'},
+  {linea:'35',primero:'22 minutos',segundo:'40 min'},
+  {linea:'40',primero:'Sin información'}
+ ]}),[{line:'23',minutes:6},{line:'35',minutes:22},{line:'40',minutes:null}]);
 });
-test('llegadas anidadas retienen el número de línea',()=>{
+test('nested arrival records retain their route number',()=>{
  assert.deepEqual(parseBusLines({result:[{linea:'5',tiempos:[{minutos:12}]}]}),[{line:'5',minutes:12}]);
 });
-test('no confunde línea, identificador ni ausencia de tiempos con llegadas',()=>{
+test('Spanish municipal arrival strings remain valid API input',()=>{
  assert.equal(minutesOf('sin información'),null);
  assert.equal(minutesOf('En la parada'),0);
  assert.equal(minutesOf('22 minutos'),22);
  assert.equal(stopId({id:'https://example.com/tuzsa-798'}),'tuzsa-798');
 });
-test('no atribuye cero averías a estaciones sin datos',()=>{
- const s=summarizeBikes([{available:3,disabled:2},{available:0,disabled:null},{available:null,disabled:null}]);
- assert.equal(s.faultKnown,1);assert.equal(s.faultTotal,2);assert.equal(s.pairedStations,1);assert.equal(s.empty,1);
+test('missing Bizi fault counts are not silently interpreted as zero',()=>{
+ const x=summarizeBikes([{available:3,disabled:2},{available:0,disabled:null},{available:null,disabled:null}]);
+ assert.equal(x.faultKnown,1);
+ assert.equal(x.faultTotal,2);
+ assert.equal(x.pairedStations,1);
+ assert.equal(x.empty,1);
 });
-test('una espera superior a 15 minutos se cuenta por línea, no por parada',()=>{
- const b=summarizeBuses([{arrivals:[{line:'23',minutes:6},{line:'35',minutes:22},{line:'40',minutes:null}],checked:10,apiResult:'known'}]);
- assert.equal(b.long,1);assert.equal(b.estimates,2);assert.equal(b.withETA,1);
+test('predictions over 15 minutes are counted per route, not per stop',()=>{
+ const x=summarizeBuses([{arrivals:[{line:'23',minutes:6},{line:'35',minutes:22},{line:'40',minutes:null}],checked:10,apiResult:'known'}]);
+ assert.equal(x.long,1);
+ assert.equal(x.estimates,2);
+ assert.equal(x.withETA,1);
+});
+test('incident coordinates accept WGS84 and municipal UTM zone 30N',()=>{
+ assert.deepEqual(incidentCoords({geometry:{coordinates:[-0.889,41.65]}}),[41.65,-0.889]);
+ const point=incidentCoords({geometry:{coordinates:[676848.74,4613403.44]}});
+ assert.ok(Math.abs(point[0]-41.653)<0.005);
+ assert.ok(Math.abs(point[1]+0.876)<0.005);
+ assert.equal(incidentCoords({geometry:{coordinates:[0,99999999]}}),null);
+});
+test('incident phase uses scheduled ranges, including both boundary dates',()=>{
+ const issue={start:'2026-11-01',end:'2026-11-30'};
+ assert.equal(incidentPhase(issue,'2026-10-31'),'upcoming');
+ assert.equal(incidentPhase(issue,'2026-11-01'),'active');
+ assert.equal(incidentPhase(issue,'2026-11-30'),'active');
+ assert.equal(incidentPhase(issue,'2026-12-01'),'ended');
+ assert.equal(incidentPhase({start:null,end:null},'2026-11-08'),'unknown');
+});
+test('incident normalization preserves official names while rejecting unsafe links',()=>{
+ const items=normalizeIncidents([
+  {id:2,title:'ROADWORKS',tipo:{id:1},inicio:'2026-11-01',fin:'2026-11-30',uri:'https://www.zaragoza.es/sede/servicio/incidencia/via-publica/2'},
+  {id:2,title:'ROADWORKS',tipo:{id:1}},
+  {id:3,title:'WATER OUTAGE',tipo:{id:0},uri:'https://example.com/malicious'}
+ ]);
+ assert.equal(items.length,2);
+ assert.equal(items[0].type,'traffic');
+ assert.equal(items[1].type,'water');
+ assert.equal(items[1].link,null);
+ assert.equal(items[0].start,'2026-11-01');
 });
