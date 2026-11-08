@@ -98,3 +98,11 @@ test('six tabs have no mobile horizontal overflow and support keyboard navigatio
  await page.keyboard.press('ArrowRight');
  await expect(page.locator('[data-view="bizi"]')).toHaveAttribute('aria-selected','true');
 });
+
+test('manual bus requests retry the documented extensionless endpoint after HTTP 400',async({page})=>{
+ await setup(page);
+ await page.route(/poste-autobus\\/tuzsa-\\d+\\.json/,r=>r.fulfill({status:400,contentType:'application/json',body:'{"error":"Bad request"}'}));
+ await page.route(/poste-autobus\\/tuzsa-\\d+$/,r=>r.fulfill(response({destinos:[{linea:'23',primero:'5 min'}]})));
+ await page.locator('#liveButton').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.stops.some(s=>s.apiResult==='known')),{timeout:30000}).toBe(true);
+});

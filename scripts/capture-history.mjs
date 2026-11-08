@@ -22,9 +22,13 @@ async function get(url){
  for(let attempt=0;attempt<2;attempt++){
   try{
    const response=await fetch(url,{signal:AbortSignal.timeout(16000),headers:{accept:'application/json'}});
-   if(!response.ok)throw Error('HTTP '+response.status);
+   if(!response.ok){
+    const body=(await response.text()).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,100);
+    const err=Error('HTTP '+response.status+(body?': '+body:''));
+    err.httpStatus=response.status;throw err;
+   }
    return await response.json();
-  }catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,500))}
+  }catch(e){if(attempt||e.httpStatus===400||e.httpStatus===404)throw e;await new Promise(resolve=>setTimeout(resolve,500))}
  }
 }
 
@@ -79,7 +83,7 @@ try{
    try{
     let response;
     try{response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`)}
-    catch(e){if(e.message!=='HTTP 404')throw e;response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}`)}
+    catch(e){if(!/^HTTP (400|404)\b/.test(e.message))throw e;response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}`)}
     const lines=parseBusLines(response);
     const arrivals=lines.map(x=>({line:x.line,minutes:x.minutes}));
     const valid=arrivals.filter(x=>x.minutes!==null);
