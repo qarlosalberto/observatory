@@ -1,17 +1,21 @@
-name: Capture public-service history
+name: Capture and publish public-service history
 on:
   schedule:
     - cron: '7,37 * * * *'
   workflow_dispatch:
 permissions:
   contents: write
+  pages: write
+  id-token: write
 concurrency:
   group: observatory-history
   cancel-in-progress: false
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 15
+    environment:
+      name: github-pages
     steps:
       - uses: actions/checkout@v4
         with:
@@ -19,9 +23,18 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Capture public APIs
+      - name: Validate collector and source
+        run: |
+          node --check scripts/capture-history.mjs
+          node --check site/app.js
+          node --check site/data.js
+          npm test
+      - name: Capture Zaragoza public APIs
         run: node scripts/capture-history.mjs
-      - name: Commit snapshots if changed
+      - name: Validate generated JSON files
+        run: |
+          node -e "for(const p of ['latest','timeline','snapshots','bus-details','incidents']){const fs=require('fs');JSON.parse(fs.readFileSync('site/history/'+p+'.json','utf8'));}"
+      - name: Commit new snapshots on main
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -31,3 +44,10 @@ jobs:
             git pull --rebase origin main
             git push origin HEAD:main
           fi
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./site
+      - name: Publish updated history to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
