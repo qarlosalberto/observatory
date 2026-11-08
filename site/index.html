@@ -39,7 +39,7 @@
   <section id="overviewView" class="view" role="tabpanel" aria-labelledby="tab-overview" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">AT A GLANCE</p><h2>City service overview</h2><p>Most recently captured measurements, not a claim of timetable punctuality.</p></div><span class="timestamp" id="updated">Not updated</span></div>
     <div id="kpis" class="kpis"></div>
-    <div class="section-divider"><span>LIVE MAP</span><span>Browse recorded observations over time</span></div>
+    <div class="section-divider"><span>RECORDED MAP</span><span>Browse recorded observations over time</span></div>
     <div id="overviewMapHost"></div>
     <div class="overview-cta"><div><strong>Street works, closures and disruptions</strong><p>See dates, locations and categories from the city’s official notices.</p></div><button type="button" id="openIncidents" class="secondary">Explore incidents <span aria-hidden="true">↗</span></button></div>
   </section>
@@ -52,7 +52,7 @@
     <p class="fineprint">A prediction exceeding 15 minutes is a long predicted wait, not evidence that a bus is running late.</p>
   </section>
   <section id="biziView" class="view hidden" role="tabpanel" aria-labelledby="tab-bizi" tabindex="0">
-    <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Live API</span></div>
+    <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Recorded API data</span></div>
     <div id="biziKpis" class="kpis"></div>
     <div class="charts two-charts"><article class="chart-card"><h3>Station availability</h3><div class="chart-wrap"><canvas id="bikeChart" aria-label="Stations by available bike count"></canvas></div><p id="bikeNote" class="note"></p></article><article class="chart-card"><h3>Available vs. out of service</h3><div class="chart-wrap"><canvas id="faultChart" aria-label="Available and out-of-service bikes"></canvas></div><p id="faultNote" class="note"></p></article></div>
     <div class="section-divider"><span>BIZI MAP</span><span>Recorded station availability</span></div>
@@ -80,7 +80,7 @@
       </div>
     </div>
     <div class="legend"><span><i style="--c:#13865d"></i>Bizi: 3+ bikes</span><span><i style="--c:#f1aa41"></i>Bizi: 1–2 bikes</span><span><i style="--c:#e25c61"></i>Bizi empty / bus &gt;15 min</span><span><i style="--c:#5188e2"></i>Bus ≤15 min</span><span><i style="--c:#89929f"></i>Unknown Bizi</span></div>
-    <p id="status" role="status" aria-live="polite" class="status">Loading public data sources…</p>
+    <p id="status" role="status" aria-live="polite" class="status">Loading the latest recorded snapshot…</p>
   </div>
   <section id="incidentsView" class="view hidden" role="tabpanel" aria-labelledby="tab-incidents" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">STREET &amp; INFRASTRUCTURE</p><h2>Public-space incidents</h2><p>Traffic closures, water outages and major street disruptions published by Zaragoza City Council.</p></div><button type="button" class="primary" id="incidentRefresh"><span aria-hidden="true">↻</span> Refresh</button></div>
