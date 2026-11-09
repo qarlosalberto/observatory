@@ -47,11 +47,32 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add site/history/snapshots.json site/history/bus-details.json site/history/incidents.json site/history/latest.json site/history/timeline.json
+          history_files=(site/history/snapshots.json site/history/bus-details.json site/history/incidents.json site/history/latest.json site/history/timeline.json)
+          base=$(git rev-parse HEAD)
+          git add "${history_files[@]}"
           if ! git diff --cached --quiet; then
             git commit -m "data: record public-service snapshot"
-            git pull --rebase origin main
-            git push origin HEAD:main
+            # Generated JSON is a complete capture. Rebasing concurrent captures
+            # would conflict or risk overwriting a newer observation with old data.
+            for attempt in 1 2 3; do
+              git fetch origin main
+              if ! git diff --quiet "$base" origin/main -- "${history_files[@]}"; then
+                echo "::warning::Another capture updated history during this run; keep its newer snapshots instead of overwriting them."
+                git reset --hard origin/main
+                break
+              fi
+              git rebase origin/main
+              if git push origin HEAD:main; then
+                break
+              fi
+              if [ "$attempt" -eq 3 ]; then
+                echo "::error::Could not publish the capture after three fast-forward attempts."
+                exit 1
+              fi
+            done
+          else
+            git fetch origin main
+            git reset --hard origin/main
           fi
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
