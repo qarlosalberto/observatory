@@ -170,3 +170,20 @@ test('Bizi count cards show percentages calculated from reported denominators',a
  await expect(cards).toContainText('Empty stations');
  await expect(cards).toContainText('0 (0%)');
 });
+
+test('cached bus catalogue shows actual stop locations without inventing arrival predictions',async({page})=>{
+ const calls=await setup(page);
+ const catalog=[
+  {id:'tuzsa-798',name:'Stop 798',coords:[41.6488,-0.8891]},
+  {id:'tuzsa-799',name:'Stop 799',coords:[41.6488,-0.8881]},
+  {id:'tuzsa-800',name:'Stop 800',coords:[41.6488,-0.8871]}
+ ];
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus:{...latest.bus,catalog}})));
+ await page.reload();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest?.state.latest?.bus?.catalog?.length)).toBe(3);
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(3);
+ const actual=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-800')?.ring.options.fillColor);
+ expect(actual).toBe('#89929f');
+ expect(calls).toEqual([]);
+});
