@@ -96,7 +96,7 @@ import {parseAvanzaArrivals,fetchAvanzaArrivals,AVANZA_URL} from '../scripts/ava
 test('Avanza arrivals are retained only when vehicle identifiers agree',()=>{
  const body='<li><a href="#"><strong>039<i></i>VADORREY</strong></a><ul><li><a href="https://gps.avanzabus.com/zaragoza/fParadas/744/9001"><i></i>9001 [3 mins]</a></li></ul></li>';
  const row={tablatiempos:body,maquinas:{'0':{icon:'/img/bus_rojo.png'},'1':{icon:'/img/bus.png',title:'039 9001'}}};
- assert.deepEqual(parseAvanzaArrivals(row),[{line:'39',minutes:3}]);
+ assert.deepEqual(parseAvanzaArrivals(row),[{line:'39',minutes:3,destination:'VADORREY',vehicle:'9001'}]);
  assert.deepEqual(parseAvanzaArrivals({tablatiempos:''}),[]);
  assert.throws(()=>parseAvanzaArrivals({...row,maquinas:{}}),/disagree/);
  assert.throws(()=>parseAvanzaArrivals({...row,tablatiempos:body.replace('[3 mins]','[999 mins]')}),/Invalid Avanza arrival/);
@@ -110,4 +110,35 @@ test('Avanza transport uses the published stop POST parameters',async()=>{
  assert.equal(call.options.method,'POST');
  assert.equal(new URLSearchParams(call.options.body).get('poste'),'744');
  assert.equal(new URLSearchParams(call.options.body).get('coche'),'0');
+});
+
+import {BUS_SAMPLE_LIMIT,selectBusSample} from '../scripts/bus-sampling.mjs';
+test('operator observations retain every vehicle for the same route and validate duplicates',()=>{
+ const body='<li><strong>039<i></i>VADORREY</strong><ul><li><a href="/zaragoza/fParadas/744/9001">9001 [3 mins]</a></li><li><a href="/zaragoza/fParadas/744/9002">9002 [11 mins]</a></li></ul></li>';
+ const markers={'0':{icon:'/img/bus.png',title:'039 9001'},'1':{icon:'/img/bus.png',title:'039 9002'}};
+ const actual=parseAvanzaArrivals({tablatiempos:body,maquinas:markers});
+ assert.equal(actual.length,2);
+ assert.deepEqual(actual.map(x=>x.minutes),[3,11]);
+ assert.deepEqual(actual.map(x=>x.vehicle),['9001','9002']);
+ assert.throws(()=>parseAvanzaArrivals({tablatiempos:body.replace('9002 [11 mins]','9001 [11 mins]'),maquinas:markers}),/Duplicate/);
+ assert.throws(()=>parseAvanzaArrivals({tablatiempos:body.replace(/<a href="[^"]+">9002 \[11 mins\]<\/a>/,'').replace('<li></li>',''),maquinas:markers}),/disagree/);
+});
+test('rotating bus-stop sampling covers all stops despite missing scheduled invocations',()=>{
+ const stops=Array.from({length:983},(_,i)=>({id:'tuzsa-'+(i+1)}));
+ let cursor=0;const selected=new Set();
+ for(let capture=0;capture<6;capture++){
+  const selection=selectBusSample(stops,cursor,BUS_SAMPLE_LIMIT);
+  assert.equal(selection.size,180);
+  assert.equal(new Set(selection.sample.map(x=>x.id)).size,180);
+  for(const s of selection.sample)selected.add(s.id);
+  cursor=selection.nextOffset;
+ }
+ assert.equal(selected.size,983);
+ assert.equal(selectBusSample([],0).size,0);
+ assert.equal(selectBusSample(stops,'invalid').sample[0].id,'tuzsa-1');
+});
+test('Bizi station thresholds include zero and exclude five bikes',()=>{
+ const value=summarizeBikes([0,1,2,3,4,5,null].map(available=>({available,disabled:null})));
+ assert.equal(value.underFive,5);
+ assert.equal(value.underTwo,2);
 });

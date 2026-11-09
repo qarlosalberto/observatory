@@ -47,7 +47,7 @@ export function parseBusLines(response){
 export const BIZI_LOW_MAX=4;
 export function summarizeBikes(stations){
  const known=stations.filter(s=>s.available!==null),pairs=stations.filter(s=>s.available!==null&&s.disabled!==null);
- return {total:stations.length,known:known.length,empty:known.filter(s=>s.available===0).length,low:known.filter(s=>s.available>0&&s.available<=BIZI_LOW_MAX).length,good:known.filter(s=>s.available>BIZI_LOW_MAX).length,available:known.reduce((n,s)=>n+s.available,0),faultStations:stations.filter(s=>s.disabled!==null&&s.disabled>0).length,faultKnown:stations.filter(s=>s.disabled!==null).length,faultTotal:stations.filter(s=>s.disabled!==null).reduce((n,s)=>n+s.disabled,0),pairedStations:pairs.length,pairedAvailable:pairs.reduce((n,s)=>n+s.available,0),pairedFaults:pairs.reduce((n,s)=>n+s.disabled,0)};
+ return {total:stations.length,known:known.length,empty:known.filter(s=>s.available===0).length,underTwo:known.filter(s=>s.available<2).length,underFive:known.filter(s=>s.available<=BIZI_LOW_MAX).length,low:known.filter(s=>s.available>0&&s.available<=BIZI_LOW_MAX).length,good:known.filter(s=>s.available>BIZI_LOW_MAX).length,available:known.reduce((n,s)=>n+s.available,0),faultStations:stations.filter(s=>s.disabled!==null&&s.disabled>0).length,faultKnown:stations.filter(s=>s.disabled!==null).length,faultTotal:stations.filter(s=>s.disabled!==null).reduce((n,s)=>n+s.disabled,0),pairedStations:pairs.length,pairedAvailable:pairs.reduce((n,s)=>n+s.available,0),pairedFaults:pairs.reduce((n,s)=>n+s.disabled,0)};
 }
 export function summarizeBuses(stops){
  const estimates=stops.flatMap(s=>s.arrivals||[]).filter(x=>x.minutes!==null);

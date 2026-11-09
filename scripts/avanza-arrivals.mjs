@@ -3,7 +3,7 @@ export const AVANZA_URL='https://gps.avanzabus.com/index.php/zaragoza/fRefrescaE
 const strip=s=>s.replace(/<[^>]+>/g,' ').replace(/&nbsp;?/gi,' ').replace(/\s+/g,' ').trim();
 export function parseAvanzaArrivals(data){
  if(!data||typeof data!=='object'||Array.isArray(data)||typeof data.tablatiempos!=='string')throw Error('Invalid Avanza response');
- const html=data.tablatiempos.trim(),reported=new Set(),seen=new Set(),best=new Map();
+ const html=data.tablatiempos.trim(),reported=new Set(),seen=new Set(),arrivals=[];
  for(const m of Object.values(data.maquinas??{})){
   if(!m||typeof m!=='object'||String(m.icon??'').split('/').pop()!=='bus.png')continue;
   const title=String(m.title??'').trim().split(/\s+/);
@@ -20,17 +20,21 @@ export function parseAvanzaArrivals(data){
   if(!/^(?:\d{1,3}|[A-Za-z]{1,3}\d{1,3})$/.test(number)||!destination)throw Error('Incomplete Avanza heading');
   const line=/^\d+$/.test(number)?String(Number(number)):number.toUpperCase();
   const body=html.slice(blocks[i].index+blocks[i][0].length,blocks[i+1]?.index??html.length);
+  let matched=0;
   for(const [,vehicle,inside] of body.matchAll(/<a\b[^>]*href=["'][^"']*\/fParadas\/\d+\/(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)){
+   matched++;
    const m=strip(inside).match(/^(\d+)\s*\[\s*(-?\d+)\s*mins?\s*\]$/i);
    if(!m||m[1]!==vehicle)throw Error('Avanza row does not match vehicle');
    const minutes=Number(m[2]);
    if(!Number.isInteger(minutes)||minutes<0||minutes>180)throw Error('Invalid Avanza arrival minutes');
+   if(seen.has(vehicle))throw Error('Duplicate Avanza vehicle identifier');
    seen.add(vehicle);
-   if(!best.has(line)||minutes<best.get(line))best.set(line,minutes);
+   arrivals.push({line,minutes,destination,vehicle});
   }
+  if(!matched)throw Error('Avanza route heading without arrival rows');
  }
  if(seen.size!==reported.size||[...seen].some(v=>!reported.has(v)))throw Error('Avanza arrival and vehicle lists disagree');
- return [...best].map(([line,minutes])=>({line,minutes})).sort((a,b)=>a.line.localeCompare(b.line,'en',{numeric:true}));
+ return arrivals.sort((a,b)=>a.minutes-b.minutes||a.line.localeCompare(b.line,'en',{numeric:true}));
 }
 export async function fetchAvanzaArrivals(number,fetcher=fetch){
  if(!Number.isInteger(number)||number<1)throw Error('Invalid bus stop number');

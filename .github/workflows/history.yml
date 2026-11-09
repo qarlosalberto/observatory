@@ -9,6 +9,7 @@ on:
       - '.github/workflows/history.yml'
       - 'scripts/capture-history.mjs'
       - 'scripts/avanza-arrivals.mjs'
+      - 'scripts/bus-sampling.mjs'
       - 'site/data.js'
 permissions:
   contents: write

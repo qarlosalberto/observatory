@@ -2,6 +2,7 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {fetchAvanzaArrivals} from './avanza-arrivals.mjs';
+import {BUS_SAMPLE_LIMIT,selectBusSample} from './bus-sampling.mjs';
 import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
@@ -15,6 +16,7 @@ const now=new Date().toISOString();
 const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'},incidents:{status:'unavailable'}};
 const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavailable',sampled:0,population:0,stops:[]}};
 const observations=[];
+const previous=await readJson(paths.latest,null);
 let busCatalog=[];
 const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
 const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
@@ -75,10 +77,8 @@ try{
  if(!discovered.length)throw Error('No bus stops with coordinates');
  discovered.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  busCatalog=discovered;
- const size=Math.min(60,discovered.length);
- const start=(Math.floor(Date.now()/1800000)*61)%discovered.length;
- const sample=Array.from({length:size},(_,i)=>discovered[(start+i)%discovered.length]);
- frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[]};
+ const {sample,size,nextOffset}=selectBusSample(discovered,previous?.bus?.nextSampleOffset,BUS_SAMPLE_LIMIT);
+ frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[],nextSampleOffset:nextOffset};
  let known=0,unknown=0,errors=0,long=0,estimates=0;
  const failures=[];
  for(let offset=0;offset<sample.length;offset+=2){
@@ -100,20 +100,23 @@ try{
     const status=valid.length?'known':'unknown';
     if(valid.length)known++;else unknown++;
     estimates+=valid.length;long+=valid.filter(x=>x.minutes>15).length;
-    frame.bus.stops.push({...stop,arrivals,status,source});
+    frame.bus.stops.push({...stop,arrivals,status,source,observedAt:new Date().toISOString()});
     observations.push({stop:stop.id,status,lines:arrivals});
    }catch(e){
     errors++;if(failures.length<3)failures.push(`${stop.id}: ${String(e.message).slice(0,90)}`);
-    frame.bus.stops.push({...stop,arrivals:[],status:'error'});
+    frame.bus.stops.push({...stop,arrivals:[],status:'error',observedAt:new Date().toISOString()});
     observations.push({stop:stop.id,status:'error',lines:[]});
    }
   }));
   await new Promise(resolve=>setTimeout(resolve,300));
  }
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
+ frame.bus.completedAt=new Date().toISOString();
  if(errors===size)frame.bus.status='unavailable';
  snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
   known,unknown,errors,estimates,over15:long,sampling:'rotating',
+  nextSampleOffset:nextOffset,completedAt:frame.bus.completedAt,
+  sources:{avanza:frame.bus.stops.filter(s=>s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.source==='municipal').length},
   ...(errors===size?{error:'All sampled bus arrival requests failed'}:{}),
   ...(failures.length?{failureExamples:failures}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
@@ -132,12 +135,12 @@ try{
 
 // The fast bootstrap file retains the most recent *successful* source capture
 // and its original timestamp; it never silently relabels old data as new.
-const previous=await readJson(paths.latest,null);
 const catalog=busCatalog.length?busCatalog:(previous?.bus?.catalog??[]);
 const catalogFetchedAt=busCatalog.length?now:(previous?.bus?.catalogFetchedAt??null);
 const busCurrent=frame.bus.status==='ok'
  ?{...frame.bus,capturedAt:now,catalog,catalogFetchedAt}
- :busCatalog.length?{...frame.bus,catalog,catalogFetchedAt}:(previous?.bus??frame.bus);
+ :previous?.bus?.status==='ok'?{...previous.bus,catalog,catalogFetchedAt,nextSampleOffset:frame.bus.nextSampleOffset??previous.bus.nextSampleOffset}:
+  busCatalog.length?{...frame.bus,catalog,catalogFetchedAt}:(previous?.bus??frame.bus);
 const latest={schema:1,at:frame.bizi.status==='ok'||frame.bus.status==='ok'?now:(previous?.at??null),
  bizi:frame.bizi.status==='ok'?{...frame.bizi,capturedAt:now}:(previous?.bizi??frame.bizi),
  bus:busCurrent};
