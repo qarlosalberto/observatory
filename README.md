@@ -33,7 +33,7 @@ Scheduled jobs may run late or be suspended. All initially empty files remain em
 ### Source definitions and interpretation
 
 - **Bizi:** GBFS station information and status, or the municipal station API for on-demand fallback. Missing out-of-service counts are unknown, not zero.
-- **Buses:** Zaragoza City Council bus stops and next-arrival predictions. The collector rotates through up to 60 stops per capture to limit load. The sample is not a simultaneous census of the whole network. A predicted wait over 15 minutes is **not proof of timetable lateness**.
+- **Buses:** The Zaragoza City Council stop catalogue plus arrival predictions from operator Avanza's public stop response, with the municipal API as fallback. The collector samples up to 60 stops, in small rate-limited batches, and validates reported vehicles before storing predictions. A stop with no prediction is not an observed arrival. A wait over 15 minutes is **not proof of timetable lateness**.
 - **Incidents:** Zaragoza City Council's public-space incidence API. Categories include water outages, traffic closures and major disruptions. Date filters are based on published intended intervals, not confirmed completion. The original official notice is linked where its URL is available.
 
 The **History** section shows aggregated trends and route/stop rankings with at least 20 known predictions; sample sizes and API failures remain explicit.
@@ -58,3 +58,5 @@ The `.github/workflows/ci-pages.yml` workflow runs unit and end-to-end browser t
 ## Language policy
 
 Repository documentation, UI labels, accessibility strings, developer-facing errors, test descriptions and new code comments are written in **English**. Official external API field names, identifier patterns, and Spanish input strings must remain unchanged wherever necessary for source compatibility.
+
+Avanza arrivals use `gps.avanzabus.com/index.php/zaragoza/fRefrescaEmpresaExternos` with POST fields `poste` and `coche=0`. Missing or malformed replies remain missing observations.

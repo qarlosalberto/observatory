@@ -8,6 +8,7 @@ on:
     paths:
       - '.github/workflows/history.yml'
       - 'scripts/capture-history.mjs'
+      - 'scripts/avanza-arrivals.mjs'
       - 'site/data.js'
 permissions:
   contents: write

@@ -91,3 +91,23 @@ test('legacy timeline labels are repaired without changing observed measurements
  assert.equal(frames[0].bizi.stations[0].name,'[object Object]');
  assert.equal(repaired[0].at,frames[0].at);
 });
+
+import {parseAvanzaArrivals,fetchAvanzaArrivals,AVANZA_URL} from '../scripts/avanza-arrivals.mjs';
+test('Avanza arrivals are retained only when vehicle identifiers agree',()=>{
+ const body='<li><a href="#"><strong>039<i></i>VADORREY</strong></a><ul><li><a href="https://gps.avanzabus.com/zaragoza/fParadas/744/9001"><i></i>9001 [3 mins]</a></li></ul></li>';
+ const row={tablatiempos:body,maquinas:{'0':{icon:'/img/bus_rojo.png'},'1':{icon:'/img/bus.png',title:'039 9001'}}};
+ assert.deepEqual(parseAvanzaArrivals(row),[{line:'39',minutes:3}]);
+ assert.deepEqual(parseAvanzaArrivals({tablatiempos:''}),[]);
+ assert.throws(()=>parseAvanzaArrivals({...row,maquinas:{}}),/disagree/);
+ assert.throws(()=>parseAvanzaArrivals({...row,tablatiempos:body.replace('[3 mins]','[999 mins]')}),/Invalid Avanza arrival/);
+ assert.throws(()=>parseAvanzaArrivals({message:'error'}),/Invalid Avanza response/);
+});
+test('Avanza transport uses the published stop POST parameters',async()=>{
+ let call;
+ const rows=await fetchAvanzaArrivals(744,async(url,options)=>{call={url,options};return {ok:true,text:async()=>JSON.stringify({tablatiempos:''})}});
+ assert.deepEqual(rows,[]);
+ assert.equal(call.url,AVANZA_URL);
+ assert.equal(call.options.method,'POST');
+ assert.equal(new URLSearchParams(call.options.body).get('poste'),'744');
+ assert.equal(new URLSearchParams(call.options.body).get('coche'),'0');
+});

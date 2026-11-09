@@ -1,6 +1,7 @@
 // Scheduled collection: only actual provider responses become observations.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
+import {fetchAvanzaArrivals} from './avanza-arrivals.mjs';
 import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
@@ -14,6 +15,7 @@ const now=new Date().toISOString();
 const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'},incidents:{status:'unavailable'}};
 const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavailable',sampled:0,population:0,stops:[]}};
 const observations=[];
+let busCatalog=[];
 const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
 const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
 const readJson=async(path,fallback)=>{try{return JSON.parse(await readFile(path,'utf8'))}catch{return fallback}};
@@ -72,25 +74,33 @@ try{
  }
  if(!discovered.length)throw Error('No bus stops with coordinates');
  discovered.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
+ busCatalog=discovered;
  const size=Math.min(60,discovered.length);
  const start=(Math.floor(Date.now()/1800000)*61)%discovered.length;
  const sample=Array.from({length:size},(_,i)=>discovered[(start+i)%discovered.length]);
  frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[]};
  let known=0,unknown=0,errors=0,long=0,estimates=0;
  const failures=[];
- for(let offset=0;offset<sample.length;offset+=6){
-  await Promise.all(sample.slice(offset,offset+6).map(async stop=>{
+ for(let offset=0;offset<sample.length;offset+=2){
+  await Promise.all(sample.slice(offset,offset+2).map(async stop=>{
    try{
-    let response;
-    try{response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`)}
-    catch(e){if(!/^HTTP (400|404)\b/.test(e.message))throw e;response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}`)}
-    const lines=parseBusLines(response);
+    let lines,source='avanza';
+    try{lines=await fetchAvanzaArrivals(Number(stop.id.slice('tuzsa-'.length)))}
+    catch(operatorError){
+     source='municipal';
+     try{
+      let response;
+      try{response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}.json`)}
+      catch(e){if(!/^HTTP (400|404)\b/.test(e.message))throw e;response=await get(`${BUS_API}/${encodeURIComponent(stop.id)}`)}
+      lines=parseBusLines(response);
+     }catch(cityError){throw Error(`Avanza: ${operatorError.message}; municipal: ${cityError.message}`)}
+    }
     const arrivals=lines.map(x=>({line:x.line,minutes:x.minutes}));
     const valid=arrivals.filter(x=>x.minutes!==null);
     const status=valid.length?'known':'unknown';
     if(valid.length)known++;else unknown++;
     estimates+=valid.length;long+=valid.filter(x=>x.minutes>15).length;
-    frame.bus.stops.push({...stop,arrivals,status});
+    frame.bus.stops.push({...stop,arrivals,status,source});
     observations.push({stop:stop.id,status,lines:arrivals});
    }catch(e){
     errors++;if(failures.length<3)failures.push(`${stop.id}: ${String(e.message).slice(0,90)}`);
@@ -98,6 +108,7 @@ try{
     observations.push({stop:stop.id,status:'error',lines:[]});
    }
   }));
+  await new Promise(resolve=>setTimeout(resolve,300));
  }
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  if(errors===size)frame.bus.status='unavailable';
@@ -122,9 +133,14 @@ try{
 // The fast bootstrap file retains the most recent *successful* source capture
 // and its original timestamp; it never silently relabels old data as new.
 const previous=await readJson(paths.latest,null);
+const catalog=busCatalog.length?busCatalog:(previous?.bus?.catalog??[]);
+const catalogFetchedAt=busCatalog.length?now:(previous?.bus?.catalogFetchedAt??null);
+const busCurrent=frame.bus.status==='ok'
+ ?{...frame.bus,capturedAt:now,catalog,catalogFetchedAt}
+ :busCatalog.length?{...frame.bus,catalog,catalogFetchedAt}:(previous?.bus??frame.bus);
 const latest={schema:1,at:frame.bizi.status==='ok'||frame.bus.status==='ok'?now:(previous?.at??null),
  bizi:frame.bizi.status==='ok'?{...frame.bizi,capturedAt:now}:(previous?.bizi??frame.bizi),
- bus:frame.bus.status==='ok'?{...frame.bus,capturedAt:now}:(previous?.bus??frame.bus)};
+ bus:busCurrent};
 await saveJson(paths.latest,latest);
 
 // Timeline measurements remain immutable; repair only malformed legacy display names using station IDs.
