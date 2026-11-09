@@ -112,10 +112,10 @@ test('manual bus requests retry the documented extensionless endpoint after HTTP
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.stops.some(s=>s.apiResult==='known')),{timeout:30000}).toBe(true);
 });
 
-test('Bizi stations with four available bikes use the yellow map marker',async({page})=>{
+test('Bizi stations use discreet color-coded dots without default repair icons',async({page})=>{
  const calls=await setup(page);
  await page.locator('[data-view="bizi"]').click();
- await expect.poll(()=>page.locator('.bike-pin').evaluateAll(nodes=>nodes.some(node=>node.textContent.trim()==='4'&&node.style.getPropertyValue('--pin')==='#e9a52f'))).toBe(true);
+ await expect.poll(()=>page.locator('.bike-station-dot').evaluateAll(nodes=>nodes.some(node=>node.style.getPropertyValue('--pin')==='#e9a52f'))).toBe(true);
  await expect(page.locator('body')).toContainText('Bizi: 1–4 bikes');
  expect(calls).toEqual([]);
 });
@@ -139,26 +139,26 @@ test('bus and Bizi tabs exclusively show their service layers',async({page})=>{
  await expect(page.locator('#showBizi')).not.toBeChecked();
  await expect(page.locator('#repairFilter')).toBeHidden();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBeGreaterThan(0);
- await expect(page.locator('.bike-pin')).toHaveCount(0);
+ await expect(page.locator('.bike-station-dot')).toHaveCount(0);
  await page.locator('[data-view="bizi"]').click();
  await expect(page.locator('#biziMapHost #map')).toBeVisible();
  await expect(page.locator('#showBus')).not.toBeChecked();
  await expect(page.locator('#showBizi')).toBeChecked();
  await expect(page.locator('#repairFilter')).toBeVisible();
- await expect(page.locator('.bike-pin')).toHaveCount(1);
+ await expect(page.locator('.bike-station-dot')).toHaveCount(1);
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(0);
  expect(calls).toEqual([]);
 });
 test('repair filter renders only repair icons and hides ordinary Bizi pins',async({page})=>{
  await setup(page);
  await page.locator('[data-view="bizi"]').click();
- await expect(page.locator('.bike-pin')).toHaveCount(1);
+ await expect(page.locator('.bike-station-dot')).toHaveCount(1);
  await page.locator('#brokenOnly').check();
  await expect(page.locator('.repair-only-pin')).toHaveCount(1);
- await expect(page.locator('.bike-pin')).toHaveCount(0);
+ await expect(page.locator('.bike-station-dot')).toHaveCount(0);
  await expect(page.locator('.bike-broken')).toHaveCount(0);
  await page.locator('#brokenOnly').uncheck();
- await expect(page.locator('.bike-pin')).toHaveCount(1);
+ await expect(page.locator('.bike-station-dot')).toHaveCount(1);
 });
 test('Bizi count cards show percentages calculated from reported denominators',async({page})=>{
  await setup(page);
@@ -186,4 +186,31 @@ test('cached bus catalogue shows actual stop locations without inventing arrival
  const actual=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-800')?.ring.options.fillColor);
  expect(actual).toBe('#89929f');
  expect(calls).toEqual([]);
+});
+
+
+test('overview groups Bizi, buses and incidents and counts zero-bike stations below five',async({page})=>{
+ const calls=await setup(page);
+ await expect(page.locator('#overviewView #map')).toHaveCount(0);
+ await expect(page.locator('#overviewBikeKpis')).toContainText('Stations below 5 bikes');
+ await expect(page.locator('#overviewBikeKpis')).toContainText('1 (100%)');
+ await expect(page.locator('#overviewBikeKpis')).toContainText('Stations below 2 bikes');
+ await expect(page.locator('#overviewBusKpis')).toContainText('Sampled stop coverage');
+ await expect(page.locator('#overviewIncidentKpis')).toContainText('Active notices');
+ await page.locator('[data-view="bizi"]').click();
+ await expect(page.locator('#biziKpis')).toContainText('Stations below 5 bikes');
+ await expect(page.locator('.bike-station-dot')).toHaveCount(1);
+ await expect(page.locator('.bike-broken')).toHaveCount(0);
+ expect(calls).toEqual([]);
+});
+test('history service groups expose charts and do not invent repair durations from incomplete frames',async({page})=>{
+ await setup(page);
+ await page.locator('[data-view="history"]').click();
+ await expect(page.locator('#historyBiziKpis')).toContainText('Mean time until faults clear');
+ await expect(page.locator('#historyBiziKpis')).toContainText('No fully bracketed episodes yet');
+ await expect(page.locator('#episodeExplanation')).toContainText('moves or removals');
+ await expect(page.locator('#historyBusKpis')).toContainText('Stops sampled');
+ for(const id of ['historyBiziChart','historyRepairChart','historyAvailabilityChart','historyBusChart','historyErrorsChart','historyWaitsChart','historyCoverageChart','historyIncidentsChart'])
+  await expect(page.locator('#'+id)).toBeVisible();
+ await expect(page.locator('#historyStatus')).toContainText('aggregate snapshots');
 });
