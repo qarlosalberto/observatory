@@ -2,6 +2,8 @@ import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,su
 const $=id=>document.getElementById(id);
 const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',blue:'#4274c7',grey:'#89929f'};
+const percent=(count,total)=>total>0?Math.round(100*count/total)+'%':'—';
+const countShare=(count,total)=>total>0?`${count} (${percent(count,total)})`:'—';
 async function getJson(url){const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timer)}}
 function renderMetricCards(id,cards){
  const target=$(id);if(!target)return;
@@ -30,18 +32,21 @@ function report(){
    :'No recorded mobility snapshot yet. The scheduled capture has not produced usable data. You can request live data manually.';
   $('updated').textContent=state.snapshotAt?'Captured '+formatSnapshotTime(state.snapshotAt):'No recorded capture yet';
  }
- const cards=[['Available bikes',s.known?s.available:'—',s.known+'/'+s.total+' stations reporting'],['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+'/'+s.total+' stations reporting'],['Empty Bizi stations',s.known?s.empty:'—','Among stations with known availability'],['Routes with waits >15 min',b.estimates?b.long:'—',b.estimates+' known predictions']];
+ const comparable=s.known>0&&s.faultKnown===s.known&&s.pairedStations===s.known;
+ const fleetTotal=comparable?s.available+s.faultTotal:0;
+ const fleetMetric=(value,hasData)=>hasData?(fleetTotal?countShare(value,fleetTotal):String(value)): '—';
+ const cards=[['Available bikes',fleetMetric(s.available,s.known>0),s.known+'/'+s.total+' stations reporting'],['Out-of-service bikes',fleetMetric(s.faultTotal,s.faultKnown>0),s.faultKnown+'/'+s.total+' stations reporting'],['Empty Bizi stations',countShare(s.empty,s.known),'Among stations with known availability'],['Routes with waits >15 min',countShare(b.long,b.estimates),b.estimates+' known predictions']];
  renderMetricCards('kpis',cards);
  renderMetricCards('busKpis',[
   ['Known predictions',b.estimates||'—',b.withETA+' stops with an estimate'],
-  ['Predicted waits ≤5 min',b.estimates?b.quick:'—','Known predictions only'],
-  ['Waits >15 min',b.estimates?b.long:'—','Not proof of lateness'],
-  ['API requests without a prediction',b.unknown,'Separate from '+b.errors+' API errors']
+  ['Predicted waits ≤5 min',countShare(b.quick,b.estimates),'Known predictions only'],
+  ['Waits >15 min',countShare(b.long,b.estimates),'Not proof of lateness'],
+  ['API requests without a prediction',countShare(b.unknown,b.queried),'Separate from '+b.errors+' API errors']
  ]);
  renderMetricCards('biziKpis',[
-  ['Available bikes',s.known?s.available:'—',s.known+' reporting stations'],
-  ['Empty stations',s.known?s.empty:'—','Out of '+s.known+' with availability data'],
-  ['Out-of-service bikes',s.faultKnown?s.faultTotal:'—',s.faultKnown+' reporting stations'],
+  ['Available bikes',fleetMetric(s.available,s.known>0),s.known+' reporting stations'],
+  ['Empty stations',countShare(s.empty,s.known),'Out of '+s.known+' with availability data'],
+  ['Out-of-service bikes',fleetMetric(s.faultTotal,s.faultKnown>0),s.faultKnown+' reporting stations'],
   ['Data coverage',s.total?Math.round(100*s.known/s.total)+'%':'—',s.known+' of '+s.total+' stations']
  ]);
  $('overviewBus').textContent=b.estimates||'—';
@@ -55,7 +60,20 @@ function report(){
 }
 function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
 function popup(title,details){const div=document.createElement('div'),strong=document.createElement('strong');strong.textContent=title;div.append(strong);for(const [line,cls] of details){const p=document.createElement('div');p.className='popup-line'+(cls?' '+cls:'');p.textContent=line;div.append(p)}return div}
-function bikeMarkers(){state.bl.clearLayers();if(!$('showBizi').checked)return;for(const st of state.stations){if($('brokenOnly').checked&&!(st.disabled>0))continue;const available=st.available,hex=available===null?color.grey:available===0?color.red:available<=BIZI_LOW_MAX?color.yellow:color.green;const n=available===null?'?':available;const badge=st.disabled>0?`<span class="bike-broken">🔧 ${st.disabled}</span>`:'';const icon=L.divIcon({className:'bike-wrapper',html:`<span class="bike-pin" style="--pin:${hex}">${n}</span>${badge}`,iconSize:[42,42],iconAnchor:[21,21]});const lines=[[state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(state.snapshotBiziAt)],['Available: '+(available??'unknown')],['Free docks: '+(st.docks??'unknown')],['Out of service: '+(st.disabled??'no data')]];L.marker(st.coords,{icon,zIndexOffset:750}).bindPopup(popup('Bizi · '+st.name,lines)).addTo(state.bl)}}
+function bikeMarkers(){
+ state.bl.clearLayers();
+ if(!$('showBizi').checked)return;
+ const repairsOnly=$('brokenOnly').checked;
+ for(const st of state.stations){
+  if(repairsOnly&&!(st.disabled>0))continue;
+  const available=st.available,hex=available===null?color.grey:available===0?color.red:available<=BIZI_LOW_MAX?color.yellow:color.green;
+  const html=repairsOnly?'<span class="repair-only-pin" aria-label="Out-of-service bikes">🔧</span>':
+   `<span class="bike-pin" style="--pin:${hex}">${available===null?'?':available}</span>${st.disabled>0?`<span class="bike-broken">🔧 ${st.disabled}</span>`:''}`;
+  const icon=L.divIcon({className:'bike-wrapper',html,iconSize:[42,42],iconAnchor:[21,21]});
+  const details=[[state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(state.snapshotBiziAt)],['Available: '+(available??'unknown')],['Free docks: '+(st.docks??'unknown')],['Out of service: '+(st.disabled??'no data')]];
+  L.marker(st.coords,{icon,zIndexOffset:750}).bindPopup(popup('Bizi · '+st.name,details)).addTo(state.bl);
+ }
+}
 function removeBus(id,marker){state.sl.removeLayer(marker.ring);state.sl.removeLayer(marker.tap);state.markers.delete(id)}
 function busMarkers(){if(!state.map)return;const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();if($('showBus').checked&&zoom>=12)for(const stop of state.stops){if(!bounds.contains(stop.coords))continue;const valid=stop.arrivals.filter(a=>a.minutes!==null);if(!valid.length)continue;active.add(stop.id);const red=valid.some(a=>a.minutes>15),hex=red?color.red:color.blue;const size=zoom>=14?22:zoom===13?14:10,touch=zoom>=14?34:zoom===13?24:17;const shape={radius:size,color:'#fff',weight:size>=22?2.5:1.5,fillColor:hex,fillOpacity:.94};const details=[
   [state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(state.snapshotBusAt)],
@@ -336,10 +354,13 @@ function selectView(view){
   button.classList.toggle('active',active);button.setAttribute('aria-selected',String(active));button.tabIndex=active?0:-1;
  }
  for(const name of views)$(name+'View').classList.toggle('hidden',name!==view);
- if(['overview','buses','bizi'].includes(view)){
+ if(['buses','bizi'].includes(view)){
   $(view+'MapHost').append($('mapWorkspace'));
-  $('mapTitle').textContent=view==='buses'?'Recorded bus predictions':view==='bizi'?'Recorded Bizi stations':'Recorded service map';
-  $('showBus').checked=view!=='bizi';$('showBizi').checked=view!=='buses';
+  $('mapTitle').textContent=view==='buses'?'Recorded bus stops and predictions':'Recorded Bizi stations';
+  $('showBus').checked=view==='buses';$('showBizi').checked=view==='bizi';
+   $('repairFilter').hidden=view!=='bizi';
+   for(const node of document.querySelectorAll('.bike-legend'))node.hidden=view!=='bizi';
+   for(const node of document.querySelectorAll('.bus-legend'))node.hidden=view!=='buses';
   $('brokenOnly').checked=false;
   if(state.liveMode)refresh(false);else {bikeMarkers();busMarkers();report()}
   requestAnimationFrame(()=>{state.map?.invalidateSize();bikeMarkers();busMarkers();for(const chart of Object.values(state.charts))chart.resize()});
@@ -362,6 +383,7 @@ for(const button of document.querySelectorAll('[data-view]')){
   selectView(tabs[next].dataset.view);tabs[next].focus();
  });
 }
+$('aboutToggle').addEventListener('click',()=>{const intro=$('siteIntro'),open=intro.hidden;intro.hidden=!open;$('aboutToggle').setAttribute('aria-expanded',String(open));$('aboutToggle').setAttribute('aria-label',open?'Hide Observatory information':'More information about Observatory')});
 $('openIncidents').addEventListener('click',()=>selectView('incidents'));
 $('refresh').addEventListener('click',()=>refresh(true));
 $('showBizi').addEventListener('change',()=>refresh(false));
@@ -369,7 +391,9 @@ $('showBus').addEventListener('change',()=>refresh(false));
 $('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('showBizi').checked=true;bikeMarkers();if(!state.stations.length)void loadBizi()});
 $('incidentRefresh').addEventListener('click',()=>void loadIncidents(true));
 for(const id of ['incidentType','incidentPhase','incidentSearch'])$(id).addEventListener(id==='incidentSearch'?'input':'change',renderIncidents);
-$('overviewMapHost').append($('mapWorkspace'));
+$('busesMapHost').append($('mapWorkspace'));
+$('repairFilter').hidden=true;
+for(const node of document.querySelectorAll('.bike-legend'))node.hidden=true;
 let scrubPending=null,scrubTimeout=null;
 $('timelineSlider').addEventListener('input',e=>{
  scrubPending=Number(e.target.value);

@@ -114,3 +114,54 @@ test('Bizi stations with four available bikes use the yellow map marker',async({
  await expect(page.locator('body')).toContainText('Bizi: 1–4 bikes');
  expect(calls).toEqual([]);
 });
+
+test('overview contains no map and the introduction expands only on request',async({page})=>{
+ await setup(page);
+ await expect(page.locator('#overviewMapHost')).toHaveCount(0);
+ await expect(page.locator('#overviewView #map')).toHaveCount(0);
+ await expect(page.locator('#siteIntro')).toBeHidden();
+ await expect(page.locator('#aboutToggle')).toHaveAttribute('aria-expanded','false');
+ await page.locator('#aboutToggle').click();
+ await expect(page.locator('#siteIntro')).toBeVisible();
+ await page.locator('#aboutToggle').click();
+ await expect(page.locator('#siteIntro')).toBeHidden();
+});
+test('bus and Bizi tabs exclusively show their service layers',async({page})=>{
+ const calls=await setup(page);
+ await page.locator('[data-view="buses"]').click();
+ await expect(page.locator('#busesMapHost #map')).toBeVisible();
+ await expect(page.locator('#showBus')).toBeChecked();
+ await expect(page.locator('#showBizi')).not.toBeChecked();
+ await expect(page.locator('#repairFilter')).toBeHidden();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBeGreaterThan(0);
+ await expect(page.locator('.bike-pin')).toHaveCount(0);
+ await page.locator('[data-view="bizi"]').click();
+ await expect(page.locator('#biziMapHost #map')).toBeVisible();
+ await expect(page.locator('#showBus')).not.toBeChecked();
+ await expect(page.locator('#showBizi')).toBeChecked();
+ await expect(page.locator('#repairFilter')).toBeVisible();
+ await expect(page.locator('.bike-pin')).toHaveCount(1);
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(0);
+ expect(calls).toEqual([]);
+});
+test('repair filter renders only repair icons and hides ordinary Bizi pins',async({page})=>{
+ await setup(page);
+ await page.locator('[data-view="bizi"]').click();
+ await expect(page.locator('.bike-pin')).toHaveCount(1);
+ await page.locator('#brokenOnly').check();
+ await expect(page.locator('.repair-only-pin')).toHaveCount(1);
+ await expect(page.locator('.bike-pin')).toHaveCount(0);
+ await expect(page.locator('.bike-broken')).toHaveCount(0);
+ await page.locator('#brokenOnly').uncheck();
+ await expect(page.locator('.bike-pin')).toHaveCount(1);
+});
+test('Bizi count cards show percentages calculated from reported denominators',async({page})=>{
+ await setup(page);
+ const cards=page.locator('#biziKpis');
+ await expect(cards).toContainText('Available bikes');
+ await expect(cards).toContainText('4 (67%)');
+ await expect(cards).toContainText('Out-of-service bikes');
+ await expect(cards).toContainText('2 (33%)');
+ await expect(cards).toContainText('Empty stations');
+ await expect(cards).toContainText('0 (0%)');
+});

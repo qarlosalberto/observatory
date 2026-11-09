@@ -233,3 +233,11 @@ footer strong{color:#344e67}
 .timeline-scale{display:flex;justify-content:space-between;gap:14px;margin:-12px 0 14px;color:#91b5c8;font-size:10px;font-variant-numeric:tabular-nums}
 .timeline-scale span:last-child{text-align:right}
 @media(max-width:690px){.timeline-scale{font-size:9px}.timeline-scale span{max-width:49%}}
+
+/* The introduction opens only when readers request more information. */
+.intro[hidden]{display:none!important}
+.about-toggle{border:1px solid #d7e5ed;border-radius:50%;width:34px;height:34px;display:grid;place-items:center;flex:none;background:#f1f8fa;color:#1c6074;font-size:20px;line-height:1;cursor:pointer}
+.about-toggle:hover,.about-toggle[aria-expanded="true"]{background:#d9f0ef;border-color:#8cd4c9}
+.about-toggle:focus-visible{outline:3px solid #167c9c;outline-offset:3px}
+.repair-only-pin{width:36px;height:36px;display:grid;place-items:center;background:#ffcf55;border:2px solid white;box-shadow:0 2px 7px #173b5560;border-radius:50%;font-size:19px}
+#repairFilter[hidden],.bike-legend[hidden],.bus-legend[hidden]{display:none!important}
