@@ -241,3 +241,17 @@ footer strong{color:#344e67}
 .about-toggle:focus-visible{outline:3px solid #167c9c;outline-offset:3px}
 .repair-only-pin{width:36px;height:36px;display:grid;place-items:center;background:#ffcf55;border:2px solid white;box-shadow:0 2px 7px #173b5560;border-radius:50%;font-size:19px}
 #repairFilter[hidden],.bike-legend[hidden],.bus-legend[hidden]{display:none!important}
+
+
+/* Keep statistics grouped by source, with distinct denominators. */
+.metric-group{margin-top:22px;min-width:0}
+.metric-group+.metric-group{padding-top:24px;border-top:1px solid var(--line)}
+.metric-group-heading{display:flex;align-items:baseline;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:13px}
+.metric-group-heading h3{font-size:18px;color:#1a3853;letter-spacing:-.03em;margin:0}
+.metric-group-heading span{font-size:11px;color:#75869a}
+.metric-group .kpis{margin-bottom:15px}
+.history-explanation{padding:17px 19px;background:#f6fafb;border:1px solid #e0eaf0;border-radius:14px}
+.history-explanation h3{margin:0 0 10px;font-size:15px}
+.history-explanation p{margin:0;font-size:12px;line-height:1.7;color:#5b7084}
+.bike-station-dot{display:block;width:16px;height:16px;border:2px solid #fff;border-radius:50%;background:var(--pin);box-shadow:0 1px 5px #173b5560}
+@media(max-width:690px){.metric-group-heading h3{font-size:16px}.metric-group-heading span{width:100%}}
