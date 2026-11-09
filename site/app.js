@@ -230,27 +230,105 @@ async function loadBusRankings(){
   render('stopRanking',sorted(Object.entries(data.stops||{}).map(([id,x])=>[id,{samples:x.estimates,over15:x.over15}])),'stop');
  }catch(e){$('lineRanking').textContent='Could not load rankings: '+e.message;$('stopRanking').textContent='Could not load rankings.'}
 }
+function drawHistoryChart(id,rows,series){
+ if(!window.Chart||!$(id))return;
+ state.charts[id]?.destroy();
+ const labels=rows.map(x=>new Date(x.at).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+ state.charts[id]=new window.Chart($(id),{
+  type:'line',
+  data:{labels,datasets:series.map(({label,value,color})=>({
+   label,data:rows.map(value),borderColor:color,backgroundColor:color,
+   pointRadius:rows.length<=40?2:0,pointHoverRadius:4,spanGaps:false,tension:.15,borderWidth:2
+  }))},
+  options:{responsive:true,maintainAspectRatio:false,animation:false,
+   scales:{y:{beginAtZero:true},x:{ticks:{maxTicksLimit:6}}},
+   plugins:{legend:{display:series.length>1,position:'bottom'},tooltip:{mode:'index',intersect:false}}}
+ });
+}
+function formatObservedHours(minutes){
+ return minutes===null?'—':'≈ '+(minutes/60).toFixed(1)+' h';
+}
+function durationNote(result,description){
+ if(!result.completed)return 'No fully bracketed episodes yet. '+result.censored+' incomplete or censored episodes.';
+ return result.completed+' bracketed episodes; average duration bounds '+(result.meanLowerMinutes/60).toFixed(1)+'–'+(result.meanUpperMinutes/60).toFixed(1)+' h. '+description;
+}
+function renderBikeShortageRanking(items){
+ const el=$('bikePersistenceRanking');el.replaceChildren();
+ if(!items.length){el.textContent='Not enough repeated station observations to rank persistent shortages.';return}
+ const table=document.createElement('table');table.className='ranking-table';
+ const head=document.createElement('thead'),tr=document.createElement('tr');
+ for(const title of ['Station','Below 2 bikes','Observed share'])tr.append(makeText('th',title));
+ head.append(tr);table.append(head);
+ const body=document.createElement('tbody');
+ for(const item of items){
+  const row=document.createElement('tr');
+  for(const value of [item.name,item.lowCount+' / '+item.known,Math.round(item.share*100)+'%'])row.append(makeText('td',value));
+  body.append(row);
+ }
+ table.append(body);el.append(table);
+}
 async function loadHistory(){
  void loadBusRankings();
  const status=$('historyStatus');
  try{
-  const rows=await getJson('./history/snapshots.json');
-  if(!Array.isArray(rows))throw Error('Invalid history format');
-  const recent=rows.slice(-336);
-  const dates=recent.map(x=>new Date(x.at).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
-  const series=[
-   ['historyBiziChart',recent.map(x=>x.bizi?.status==='ok'?x.bizi.empty:null)],
-   ['historyBusChart',recent.map(x=>x.bus?.status==='ok'&&x.bus.estimates>0?Math.round(1000*x.bus.over15/x.bus.estimates)/10:null)],
-   ['historyErrorsChart',recent.map(x=>x.bus?.status==='ok'?x.bus.errors:null)]
-  ];
-  for(const [id,data] of series){
-   if(!window.Chart)continue;
-   state.charts[id]?.destroy();
-   state.charts[id]=new window.Chart($(id),{type:'line',data:{labels:dates,datasets:[{data,label:id==='historyBiziChart'?'Empty stations':id==='historyBusChart'?'% of predictions':'API errors',borderColor:'#16558c',backgroundColor:'#16558c',pointRadius:0,spanGaps:false,tension:.15}]},options:{responsive:true,maintainAspectRatio:false,animation:false,scales:{y:{beginAtZero:true}},plugins:{legend:{display:false}}}});
-  }
-  const first=rows[0]?.at,last=rows.at(-1)?.at;
-  status.textContent=rows.length?`${rows.length} snapshots recorded · from ${new Date(first).toLocaleString('en-GB')} to ${new Date(last).toLocaleString('en-GB')} · showing the latest ${recent.length}`:'No measurements yet. The first snapshot will appear after the scheduled workflow runs.';
- }catch(e){status.textContent='Could not load history: '+e.message}
+  const [rows,timeline]=await Promise.all([
+   getJson('./history/snapshots.json'),
+   getJson('./history/timeline.json')
+  ]);
+  if(!Array.isArray(rows)||timeline?.schema!==1||!Array.isArray(timeline.frames))throw Error('Invalid recorded history');
+  const recent=rows.filter(x=>Number.isFinite(Date.parse(x?.at))).slice(-336);
+  const analysis=analyzeBikeHistory(timeline.frames);
+  const lastBizi=analysis.last,latestBus=recent.at(-1)?.bus;
+  renderMetricCards('historyBiziKpis',[
+   ['Stations below 5 bikes',lastBizi?countShare(lastBizi.underFive,lastBizi.known):'—','0–4 available bikes in the latest captured frame'],
+   ['Stations below 2 bikes',lastBizi?countShare(lastBizi.underTwo,lastBizi.known):'—','0 or 1 bike in the latest captured frame'],
+   ['Out-of-service bikes',lastBizi?lastBizi.disabled:'—',lastBizi?lastBizi.affectedStations+' stations reported faults':'No comparable capture'],
+   ['Shortage recovery episodes',analysis.low.completed,'Complete observed transitions only; '+analysis.low.censored+' censored'],
+   ['Mean time below 2 bikes',formatObservedHours(analysis.low.meanMinutes),durationNote(analysis.low,'Interval midpoint estimate, not continuous monitoring.')],
+   ['Fault-count clearance episodes',analysis.faults.completed,'Reported disabled counts fell to zero; not confirmed repairs'],
+   ['Mean time until faults clear',formatObservedHours(analysis.faults.meanMinutes),durationNote(analysis.faults,'Not an actual bicycle repair time.')]
+  ]);
+  renderMetricCards('historyBusKpis',[
+   ['Stops sampled',latestBus?.sampled??'—',latestBus?.population?countShare(latestBus.sampled,latestBus.population)+' of catalogue':'No stop catalogue'],
+   ['Stops with verified ETA',latestBus?.sampled?countShare(latestBus.known,latestBus.sampled):'—','Sampled stop coverage, not the entire network'],
+   ['Individual bus predictions',latestBus?.status==='ok'?latestBus.estimates:'—','Each operator-announced vehicle counted separately'],
+   ['Provider request errors',latestBus?.errors??'—',latestBus?.sampled?countShare(latestBus.errors,latestBus.sampled)+' of attempted stops':'No attempted requests']
+  ]);
+  renderBikeShortageRanking(analysis.ranked);
+  $('episodeExplanation').textContent='For a station, a complete episode needs consecutive valid captures showing a healthy state, then an affected state, then recovery. Start and end occur between observations; the displayed mean is the midpoint of the possible-duration interval. Gaps longer than '+analysis.maxGapMinutes+' minutes, unknown counts and unfinished episodes are censored. Fault counts dropping to zero may reflect repairs, moves or removals. '+analysis.largeGaps+' long capture gaps detected; no true repair duration is asserted.';
+  drawHistoryChart('historyBiziChart',analysis.series,[
+   {label:'Below 2 bikes',value:x=>x.underTwo,color:'#cf4a53'},
+   {label:'Below 5 bikes',value:x=>x.underFive,color:'#e9a52f'},
+   {label:'Empty stations',value:x=>x.empty,color:'#4c739f'}
+  ]);
+  drawHistoryChart('historyRepairChart',analysis.series,[
+   {label:'Disabled bikes',value:x=>x.disabled,color:'#bc7b3b'},
+   {label:'Affected stations',value:x=>x.affectedStations,color:'#7b5d9f'}
+  ]);
+  drawHistoryChart('historyAvailabilityChart',analysis.series,[
+   {label:'Available bicycles',value:x=>x.available,color:'#16846b'}
+  ]);
+  drawHistoryChart('historyBusChart',recent,[
+   {label:'Sampled stops',value:x=>x.bus?.sampled??null,color:'#8596a8'},
+   {label:'Stops with verified ETA',value:x=>x.bus?.known??null,color:'#2876aa'},
+   {label:'Individual predictions',value:x=>x.bus?.estimates??null,color:'#16a48a'}
+  ]);
+  drawHistoryChart('historyErrorsChart',recent,[
+   {label:'Request errors',value:x=>x.bus?.errors??null,color:'#cb5759'},
+   {label:'No prediction returned',value:x=>x.bus?.unknown??null,color:'#d49e4d'}
+  ]);
+  drawHistoryChart('historyWaitsChart',recent,[
+   {label:'Over 15 min (%)',value:x=>x.bus?.estimates>0?Math.round(1000*x.bus.over15/x.bus.estimates)/10:null,color:'#b65359'}
+  ]);
+  drawHistoryChart('historyCoverageChart',recent,[
+   {label:'Queried stops (%)',value:x=>x.bus?.population>0?Math.round(1000*x.bus.sampled/x.bus.population)/10:null,color:'#316ea1'}
+  ]);
+  drawHistoryChart('historyIncidentsChart',recent,[
+   {label:'Retrieved notices',value:x=>x.incidents?.status==='ok'?x.incidents.fetched:null,color:'#7564a4'}
+  ]);
+  const first=recent[0]?.at,last=recent.at(-1)?.at;
+  status.textContent=recent.length?recent.length+' aggregate snapshots · '+formatSnapshotTime(first)+' to '+formatSnapshotTime(last)+'. Bizi station analysis: '+analysis.frames+' valid frames over the last seven days; '+analysis.largeGaps+' long observation gaps. No missing values are interpolated.':'No recorded snapshots yet.';
+ }catch(e){status.textContent='Could not load recorded history: '+e.message}
 }
 
 function zaragozaToday(){
