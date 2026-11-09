@@ -142,3 +142,46 @@ test('Bizi station thresholds include zero and exclude five bikes',()=>{
  assert.equal(value.underFive,5);
  assert.equal(value.underTwo,2);
 });
+
+import {analyzeBikeHistory} from '../site/history-analysis.js';
+test('historical low-bike and out-of-service durations are interval estimates, not asserted repair times',()=>{
+ const t=['2026-11-09T10:00:00Z','2026-11-09T10:30:00Z','2026-11-09T11:00:00Z','2026-11-09T11:30:00Z'];
+ const frames=t.map((at,i)=>({at,bizi:{status:'ok',stations:[
+  {id:'a',name:'Station A',available:[3,1,1,4][i],disabled:[0,2,1,0][i]},
+  {id:'b',name:'Station B',available:0,disabled:1}
+ ]}}));
+ const result=analyzeBikeHistory(frames);
+ assert.equal(result.frames,4);
+ assert.equal(result.last.underFive,2);
+ assert.equal(result.last.underTwo,1);
+ assert.equal(result.last.affectedStations,1);
+ assert.equal(result.low.completed,1);
+ assert.equal(result.faults.completed,1);
+ assert.equal(result.low.meanMinutes,60);
+ assert.equal(result.low.meanLowerMinutes,30);
+ assert.equal(result.low.meanUpperMinutes,90);
+ assert.equal(result.faults.meanMinutes,60);
+ assert.equal(result.low.censored,1);
+ assert.equal(result.faults.censored,1);
+ assert.equal(result.ranked[0].id,'b');
+ assert.equal(result.ranked[0].share,1);
+});
+test('history does not bridge missed captures, missing values or right-censored episodes',()=>{
+ const t=['2026-11-09T10:00:00Z','2026-11-09T10:30:00Z','2026-11-09T13:00:00Z'];
+ const frames=t.map((at,i)=>({at,bizi:{status:'ok',stations:[{id:'a',available:[4,1,4][i],disabled:[0,2,0][i]}]}}));
+ const result=analyzeBikeHistory(frames);
+ assert.equal(result.low.completed,0);
+ assert.equal(result.faults.completed,0);
+ assert.equal(result.low.meanMinutes,null);
+ assert.equal(result.faults.meanMinutes,null);
+ assert.equal(result.largeGaps,1);
+ const missing=analyzeBikeHistory([
+  {at:t[0],bizi:{status:'ok',stations:[{id:'a',available:4,disabled:0}]}},
+  {at:t[1],bizi:{status:'ok',stations:[{id:'a',available:null,disabled:null}]}},
+  {at:'2026-11-09T11:00:00Z',bizi:{status:'ok',stations:[{id:'a',available:0,disabled:1}]}},
+  {at:'2026-11-09T11:30:00Z',bizi:{status:'ok',stations:[{id:'a',available:4,disabled:0}]}}
+ ]);
+ assert.equal(missing.low.completed,0);
+ assert.equal(missing.faults.completed,0);
+ assert.equal(analyzeBikeHistory([]).frames,0);
+});
