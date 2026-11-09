@@ -1,7 +1,7 @@
 // Scheduled collection: only actual provider responses become observations.
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
-import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName} from '../site/data.js';
+import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
  summary:'site/history/snapshots.json',
@@ -127,11 +127,11 @@ const latest={schema:1,at:frame.bizi.status==='ok'||frame.bus.status==='ok'?now:
  bus:frame.bus.status==='ok'?{...frame.bus,capturedAt:now}:(previous?.bus??frame.bus)};
 await saveJson(paths.latest,latest);
 
-// Timeline frames are immutable measurements. Missing sources remain missing.
+// Timeline measurements remain immutable; repair only malformed legacy display names using station IDs.
 const timeline=await readJson(paths.timeline,{schema:1,frames:[]});
 const frames=Array.isArray(timeline?.frames)?timeline.frames:[];
 frames.push(frame);
-const retained=frames.filter(x=>x?.at&&Date.parse(x.at)>=Date.now()-7*86400000).slice(-336);
+const retained=repairTimelineStationNames(frames.filter(x=>x?.at&&Date.parse(x.at)>=Date.now()-7*86400000).slice(-336),latest.bizi?.stations??[]);
 await saveJson(paths.timeline,{schema:1,updatedAt:now,retentionDays:7,frames:retained});
 
 const summary=await readJson(paths.summary,[]);

@@ -2,7 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {
  parseBusLines,minutesOf,stopId,summarizeBikes,summarizeBuses,
- incidentCoords,incidentPhase,normalizeIncidents,stationName,INCIDENT_API,BIZI_LOW_MAX
+ incidentCoords,incidentPhase,normalizeIncidents,stationName,INCIDENT_API,BIZI_LOW_MAX,repairTimelineStationNames
 } from '../site/data.js';
 
 test('each route retains its next arrival, including unavailable predictions',()=>{
@@ -80,4 +80,14 @@ test('Bizi low-availability category includes four bikes but not five',()=>{
  assert.equal(summary.low,4);
  assert.equal(summary.good,2);
  assert.equal(summary.available,23);
+});
+
+test('legacy timeline labels are repaired without changing observed measurements',()=>{
+ const frames=[{at:'2026-11-08T20:44:00Z',bizi:{status:'ok',stations:[{id:'2',name:'[object Object]',available:8,disabled:0},{id:'3',name:'Original',available:4}]}}];
+ const repaired=repairTimelineStationNames(frames,[{id:'2',name:'1-Palacio Congresos'},{id:'3',name:'Updated'}]);
+ assert.equal(repaired[0].bizi.stations[0].name,'1-Palacio Congresos');
+ assert.equal(repaired[0].bizi.stations[0].available,8);
+ assert.equal(repaired[0].bizi.stations[1].name,'Original');
+ assert.equal(frames[0].bizi.stations[0].name,'[object Object]');
+ assert.equal(repaired[0].at,frames[0].at);
 });

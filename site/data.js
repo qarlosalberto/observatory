@@ -108,3 +108,9 @@ export function stationName(value,id){
  }
  return String(id??'Unknown station');
 }
+
+// Repair legacy display labels only; recorded counts and timestamps remain unchanged.
+export function repairTimelineStationNames(frames,referenceStations){
+ const names=new Map(referenceStations.filter(s=>s?.id!=null&&typeof s.name==='string'&&!s.name.includes('[object Object]')).map(s=>[String(s.id),s.name]));
+ return frames.map(frame=>({...frame,bizi:frame.bizi?.stations?{...frame.bizi,stations:frame.bizi.stations.map(st=>st?.name?.includes('[object Object]')&&names.has(String(st.id))?{...st,name:names.get(String(st.id))}:st)}:frame.bizi}));
+}
