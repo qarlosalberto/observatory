@@ -130,6 +130,7 @@ test('rotating bus-stop sampling covers all stops despite missing scheduled invo
   const selection=selectBusSample(stops,cursor,BUS_SAMPLE_LIMIT);
   assert.equal(selection.size,180);
   assert.equal(new Set(selection.sample.map(x=>x.id)).size,180);
+  if(capture===0)assert.ok(Number(selection.sample.at(-1).id.slice(6))>700,'first capture spans the stop catalogue');
   for(const s of selection.sample)selected.add(s.id);
   cursor=selection.nextOffset;
  }

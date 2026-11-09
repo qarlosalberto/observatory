@@ -5,8 +5,13 @@ export function selectBusSample(stops,priorOffset=0,limit=BUS_SAMPLE_LIMIT){
  if(!total)return {sample:[],size:0,nextOffset:0};
  const size=Math.min(total,Math.max(1,Math.floor(limit)));
  const start=Number.isInteger(priorOffset)&&priorOffset>=0?priorOffset%total:0;
- const sample=Array.from({length:size},(_,i)=>stops[(start+i)%total]);
- return {sample,size,nextOffset:(start+size)%total};
+ // Interleave the sorted IDs: one capture covers stops across the city rather
+ // than an adjacent block of IDs. A coprime stride visits every stop once per cycle.
+ const gcd=(a,b)=>b?gcd(b,a%b):a;
+ let stride=Math.max(1,Math.floor(total/size));
+ while(gcd(stride,total)!==1)stride++;
+ const sample=Array.from({length:size},(_,i)=>stops[(start+i*stride)%total]);
+ return {sample,size,nextOffset:(start+size*stride)%total};
 }
 
 
