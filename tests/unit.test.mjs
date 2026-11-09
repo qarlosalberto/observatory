@@ -120,7 +120,7 @@ test('operator observations retain every vehicle for the same route and validate
  assert.equal(actual.length,2);
  assert.deepEqual(actual.map(x=>x.minutes),[3,11]);
  assert.deepEqual(actual.map(x=>x.vehicle),['9001','9002']);
- assert.throws(()=>parseAvanzaArrivals({tablatiempos:body.replace('9002 [11 mins]','9001 [11 mins]'),maquinas:markers}),/Duplicate/);
+ assert.throws(()=>parseAvanzaArrivals({tablatiempos:body.replace('/744/9002','/744/9001').replace('9002 [11 mins]','9001 [11 mins]'),maquinas:markers}),/Duplicate/);
  assert.throws(()=>parseAvanzaArrivals({tablatiempos:body.replace(/<a href="[^"]+">9002 \[11 mins\]<\/a>/,'').replace('<li></li>',''),maquinas:markers}),/disagree/);
 });
 test('rotating bus-stop sampling covers all stops despite missing scheduled invocations',()=>{
