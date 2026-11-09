@@ -112,7 +112,7 @@ test('Avanza transport uses the published stop POST parameters',async()=>{
  assert.equal(new URLSearchParams(call.options.body).get('coche'),'0');
 });
 
-import {BUS_SAMPLE_LIMIT,selectBusSample} from '../scripts/bus-sampling.mjs';
+import {BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from '../scripts/bus-sampling.mjs';
 test('operator observations retain every vehicle for the same route and validate duplicates',()=>{
  const body='<li><strong>039<i></i>VADORREY</strong><ul><li><a href="/zaragoza/fParadas/744/9001">9001 [3 mins]</a></li><li><a href="/zaragoza/fParadas/744/9002">9002 [11 mins]</a></li></ul></li>';
  const markers={'0':{icon:'/img/bus.png',title:'039 9001'},'1':{icon:'/img/bus.png',title:'039 9002'}};
@@ -184,4 +184,15 @@ test('history does not bridge missed captures, missing values or right-censored 
  assert.equal(missing.low.completed,0);
  assert.equal(missing.faults.completed,0);
  assert.equal(analyzeBikeHistory([]).frames,0);
+});
+
+test('captured bus records keep every vehicle and destination without inventing missing metadata',()=>{
+ const source=[
+  {line:'39',minutes:3,vehicle:'9001',destination:'VADORREY'},
+  {line:'39',minutes:11,vehicle:'9002',destination:'VADORREY'},
+  {line:'23',minutes:5}
+ ];
+ assert.deepEqual(serializeBusArrivals(source),source);
+ assert.equal(serializeBusArrivals(source).length,3);
+ assert.deepEqual(serializeBusArrivals([{line:'31',minutes:null}]),[{line:'31',minutes:null}]);
 });

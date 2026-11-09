@@ -8,3 +8,15 @@ export function selectBusSample(stops,priorOffset=0,limit=BUS_SAMPLE_LIMIT){
  const sample=Array.from({length:size},(_,i)=>stops[(start+i)%total]);
  return {sample,size,nextOffset:(start+size)%total};
 }
+
+
+// Preserve operator identity and destination alongside each observed stop-level ETA.
+// Municipal fallback predictions may legitimately have no vehicle identifier.
+export function serializeBusArrivals(lines){
+ return lines.map(row=>({
+  line:String(row.line),
+  minutes:row.minutes??null,
+  ...(typeof row.vehicle==='string'&&row.vehicle?{vehicle:row.vehicle}:{}),
+  ...(typeof row.destination==='string'&&row.destination?{destination:row.destination}:{})
+ }));
+}

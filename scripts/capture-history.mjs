@@ -2,7 +2,7 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {fetchAvanzaArrivals} from './avanza-arrivals.mjs';
-import {BUS_SAMPLE_LIMIT,selectBusSample} from './bus-sampling.mjs';
+import {BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from './bus-sampling.mjs';
 import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
@@ -95,7 +95,7 @@ try{
       lines=parseBusLines(response);
      }catch(cityError){throw Error(`Avanza: ${operatorError.message}; municipal: ${cityError.message}`)}
     }
-    const arrivals=lines.map(x=>({line:x.line,minutes:x.minutes}));
+    const arrivals=serializeBusArrivals(lines);
     const valid=arrivals.filter(x=>x.minutes!==null);
     const status=valid.length?'known':'unknown';
     if(valid.length)known++;else unknown++;
