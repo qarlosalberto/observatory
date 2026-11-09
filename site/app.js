@@ -21,6 +21,7 @@ function formatSnapshotTime(at){
 }
 function report(){
  const s=summarizeBikes(state.stations),b=summarizeBuses(state.stops);
+ const observedVehicles=new Set(state.stops.flatMap(stop=>stop.arrivals||[]).map(a=>a.vehicle).filter(id=>typeof id==='string'&&/^\d+$/.test(id))).size;
  const visible=state.map?state.stops.filter(x=>x.id.startsWith('tuzsa-')&&state.map.getBounds().pad(.12).contains(x.coords)):[];
  if(state.liveMode){
   $('status').textContent=`On-demand live requests · ${visible.filter(x=>x.checked>0).length}/${visible.length} visible bus stops queried · ${b.withETA} stops with predictions · ${b.errors} bus errors${state.busLoading?' · Loading…':''}${state.busError?' · '+state.busError:''}`;
@@ -44,13 +45,15 @@ function report(){
   ['Empty stations',countShare(s.empty,s.known),'Among stations with known availability']
  ]);
  renderMetricCards('overviewBusKpis',[
-  ['Verified bus predictions',b.estimates||'—',b.withETA+' sampled stops with arrivals'],
+  ['Stop-level arrival estimates',b.estimates||'—',b.withETA+' sampled stops with arrivals'],
+  ['Distinct operator vehicle IDs',observedVehicles||'—','From Avanza sampled stops only; not the city fleet'],
   ['Sampled stop coverage',state.snapshotBusPopulation?countShare(state.snapshotBusSampled,state.snapshotBusPopulation):'—','Queried in this captured frame'],
   ['Stops with verified arrivals',countShare(b.withETA,b.queried),b.queried+' queried stops'],
   ['Waits above 15 min',countShare(b.long,b.estimates),'Waits, not timetable delays']
  ]);
  renderMetricCards('busKpis',[
-  ['Known predictions',b.estimates||'—',b.withETA+' stops with an estimate'],
+  ['Stop-level arrival estimates',b.estimates||'—',b.withETA+' stops with an estimate'],
+   ['Distinct operator vehicle IDs',observedVehicles||'—','One vehicle can appear at several stops'],
   ['Predicted waits ≤5 min',countShare(b.quick,b.estimates),'Known predictions only'],
   ['Waits >15 min',countShare(b.long,b.estimates),'Not proof of lateness'],
   ['API requests without a prediction',countShare(b.unknown,b.queried),'Separate from '+b.errors+' API errors']
@@ -67,7 +70,7 @@ function report(){
  $('overviewBike').textContent=s.known?s.available:'—';
  $('bikeNote').textContent=s.known?`${s.known} of ${s.total} stations report availability; ${s.total-s.known} unknown.`:'No reliable availability data.';
  $('faultNote').textContent=s.pairedStations?`Comparison across ${s.pairedStations} stations reporting both counts. ${s.total-s.pairedStations} stations have no comparable data.`:'The source does not provide comparable out-of-service bike counts. Unknown does not mean zero.';
- $('busNote').textContent=`${b.estimates} vehicle predictions from ${b.withETA} of ${state.snapshotBusSampled||b.queried} sampled stops (${percent(state.snapshotBusSampled||b.queried,state.snapshotBusPopulation)} of the published stop catalogue). ${b.unknown} requests without predictions; ${b.errors} API errors. Unqueried stops are not counted as empty. Predictions are not timetable delays.`;
+ $('busNote').textContent=`${b.estimates} stop-level arrival estimates from ${b.withETA} of ${state.snapshotBusSampled||b.queried} sampled stops (${percent(state.snapshotBusSampled||b.queried,state.snapshotBusPopulation)} of the published stop catalogue). ${observedVehicles} distinct Avanza vehicle IDs; one physical bus can appear at several stops. Municipal fallback ETAs may lack vehicle IDs. ${b.unknown} requests without predictions; ${b.errors} API errors. Unqueried stops are not counted as empty or late.`;
  chart('bikeChart','doughnut',['5+ available','1–4 available','Empty'],[s.good,s.low,s.empty],[color.green,color.yellow,color.red]);
  chart('faultChart','bar',s.pairedStations?['Available','Out of service']:['No data'],s.pairedStations?[s.pairedAvailable,s.pairedFaults]:[0],s.pairedStations?[color.green,color.yellow]:[color.grey]);
  chart('busChart','bar',['0–5 min','6–15 min','>15 min'],[b.quick,b.medium,b.long],[color.green,color.blue,color.red]);
@@ -279,6 +282,7 @@ async function loadHistory(){
   const recent=rows.filter(x=>Number.isFinite(Date.parse(x?.at))).slice(-336);
   const analysis=analyzeBikeHistory(timeline.frames);
   const lastBizi=analysis.last,latestBus=recent.at(-1)?.bus;
+  const historyVehicles=new Set((timeline.frames.at(-1)?.bus?.stops||[]).flatMap(stop=>stop.arrivals||[]).map(a=>a.vehicle).filter(id=>typeof id==='string'&&/^\d+$/.test(id))).size;
   renderMetricCards('historyBiziKpis',[
    ['Stations below 5 bikes',lastBizi?countShare(lastBizi.underFive,lastBizi.known):'—','0–4 available bikes in the latest captured frame'],
    ['Stations below 2 bikes',lastBizi?countShare(lastBizi.underTwo,lastBizi.known):'—','0 or 1 bike in the latest captured frame'],
@@ -291,7 +295,8 @@ async function loadHistory(){
   renderMetricCards('historyBusKpis',[
    ['Stops sampled',latestBus?.sampled??'—',latestBus?.population?countShare(latestBus.sampled,latestBus.population)+' of catalogue':'No stop catalogue'],
    ['Stops with verified ETA',latestBus?.sampled?countShare(latestBus.known,latestBus.sampled):'—','Sampled stop coverage, not the entire network'],
-   ['Individual bus predictions',latestBus?.status==='ok'?latestBus.estimates:'—','Each operator-announced vehicle counted separately'],
+   ['Stop-level ETA entries',latestBus?.status==='ok'?latestBus.estimates:'—','A vehicle may be announced at multiple stops'],
+   ['Distinct observed operator vehicles',historyVehicles||'—','Only observed Avanza vehicle IDs in the latest frame'],
    ['Provider request errors',latestBus?.errors??'—',latestBus?.sampled?countShare(latestBus.errors,latestBus.sampled)+' of attempted stops':'No attempted requests']
   ]);
   renderBikeShortageRanking(analysis.ranked);
@@ -311,7 +316,7 @@ async function loadHistory(){
   drawHistoryChart('historyBusChart',recent,[
    {label:'Sampled stops',value:x=>x.bus?.sampled??null,color:'#8596a8'},
    {label:'Stops with verified ETA',value:x=>x.bus?.known??null,color:'#2876aa'},
-   {label:'Individual predictions',value:x=>x.bus?.estimates??null,color:'#16a48a'}
+   {label:'Stop-level ETAs',value:x=>x.bus?.estimates??null,color:'#16a48a'}
   ]);
   drawHistoryChart('historyErrorsChart',recent,[
    {label:'Request errors',value:x=>x.bus?.errors??null,color:'#cb5759'},

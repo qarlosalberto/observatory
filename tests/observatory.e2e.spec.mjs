@@ -214,3 +214,21 @@ test('history service groups expose charts and do not invent repair durations fr
   await expect(page.locator('#'+id)).toBeVisible();
  await expect(page.locator('#historyStatus')).toContainText('aggregate snapshots');
 });
+
+
+test('bus statistics distinguish multiple stop-level ETAs from unique reported vehicles',async({page})=>{
+ await setup(page);
+ const bus={...latest.bus,stops:[
+  {...stop(798,4),arrivals:[{line:'23',minutes:4,vehicle:'9001',destination:'CENTER'}]},
+  {...stop(799,8),arrivals:[{line:'23',minutes:8,vehicle:'9001',destination:'CENTER'}]}
+ ]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest?.state.latest?.at)).toBe(after);
+ await expect(page.locator('#overviewBusKpis')).toContainText('Stop-level arrival estimates');
+ await expect(page.locator('#overviewBusKpis')).toContainText('Distinct operator vehicle IDs');
+ await page.locator('[data-view="buses"]').click();
+ const cards=page.locator('#busKpis .kpi');
+ await expect(cards.filter({hasText:'Stop-level arrival estimates'}).locator('strong')).toHaveText('2');
+ await expect(cards.filter({hasText:'Distinct operator vehicle IDs'}).locator('strong')).toHaveText('1');
+});

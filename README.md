@@ -60,3 +60,5 @@ The `.github/workflows/ci-pages.yml` workflow runs unit and end-to-end browser t
 Repository documentation, UI labels, accessibility strings, developer-facing errors, test descriptions and new code comments are written in **English**. Official external API field names, identifier patterns, and Spanish input strings must remain unchanged wherever necessary for source compatibility.
 
 Avanza arrivals use `gps.avanzabus.com/index.php/zaragoza/fRefrescaEmpresaExternos` with POST fields `poste` and `coche=0`. Missing or malformed replies remain missing observations.
+
+**Counting bus predictions:** one ETA is recorded for each stop-level arrival announcement. The same Avanza vehicle may be observed at more than one sampled stop. The Buses cards distinguish total ETA entries from distinct operator vehicle IDs; municipal fallback records may not include vehicle identity. Neither figure is a census of all buses circulating in Zaragoza.
