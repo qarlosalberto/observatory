@@ -75,9 +75,9 @@ function bikeMarkers(){
  }
 }
 function removeBus(id,marker){state.sl.removeLayer(marker.ring);state.sl.removeLayer(marker.tap);state.markers.delete(id)}
-function busMarkers(){if(!state.map)return;const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();if($('showBus').checked&&zoom>=12)for(const stop of state.stops){if(!bounds.contains(stop.coords))continue;const valid=stop.arrivals.filter(a=>a.minutes!==null);if(!valid.length)continue;active.add(stop.id);const red=valid.some(a=>a.minutes>15),hex=red?color.red:color.blue;const size=zoom>=14?22:zoom===13?14:10,touch=zoom>=14?34:zoom===13?24:17;const shape={radius:size,color:'#fff',weight:size>=22?2.5:1.5,fillColor:hex,fillOpacity:.94};const details=[
-  [state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(state.snapshotBusAt)],
-  ...stop.arrivals.map(a=>['Route '+a.line+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':''])
+function busMarkers(){if(!state.map)return;const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();if($('showBus').checked&&zoom>=12)for(const stop of state.stops){if(!bounds.contains(stop.coords))continue;const valid=stop.arrivals.filter(a=>a.minutes!==null);active.add(stop.id);const red=valid.some(a=>a.minutes>15),hex=!valid.length?color.grey:red?color.red:color.blue;const size=!valid.length?(zoom>=14?7:5):zoom>=14?22:zoom===13?14:10,touch=zoom>=14?34:zoom===13?24:17;const shape={radius:size,color:'#fff',weight:size>=22?2.5:1.5,fillColor:hex,fillOpacity:.94};const details=[
+  [valid.length?(state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(state.snapshotBusAt)):'No verified arrival prediction'],
+  ...(valid.length?stop.arrivals.map(a=>['Route '+a.line+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']):[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
  ];const signature=JSON.stringify([shape,details]);let marker=state.markers.get(stop.id);if(!marker){const ring=L.circleMarker(stop.coords,{pane:'busPane',...shape,interactive:false}).addTo(state.sl);const tap=L.circleMarker(stop.coords,{pane:'busPane',radius:touch,color:'#000',opacity:0,weight:0,fillOpacity:.001,interactive:true});tap.bindPopup(popup('Stop '+stop.name,details),{autoPan:false}).addTo(state.sl);marker={ring,tap,signature};state.markers.set(stop.id,marker)}else if(marker.signature!==signature){marker.ring.setStyle(shape);marker.ring.setRadius(size);marker.tap.setRadius(touch);marker.tap.setPopupContent(popup('Stop '+stop.name,details));marker.signature=signature}}
  for(const [id,m] of state.markers)if(!active.has(id)&&!m.tap.isPopupOpen())removeBus(id,m)}
 async function loadBizi(force=false){if(!state.liveMode||!$('showBizi').checked)return;const epoch=state.liveEpoch;if(!force&&state.stations.length&&Date.now()-state.bikeFetched<60000){bikeMarkers();return}state.bikeError='';try{const feed=await getJson(BIZI_GBFS);const feeds=feed.data?.feeds||Object.values(feed.data||{}).find(x=>Array.isArray(x?.feeds))?.feeds||[];const info=feeds.find(x=>x.name==='station_information')?.url,status=feeds.find(x=>x.name==='station_status')?.url;if(!info||!status)throw Error('Missing GBFS feeds');const [i,s]=await Promise.all([getJson(info),getJson(status)]),statuses=new Map(asItems(s).map(a=>[String(a.station_id),a]));if(epoch!==state.liveEpoch||!state.liveMode)return;state.stations=asItems(i).map(x=>{const a=statuses.get(String(x.station_id))||{},n=a.num_vehicles_available??a.num_bikes_available,d=a.num_vehicles_disabled??a.num_bikes_disabled,k=a.num_docks_available;return {name:stationName(x.name,x.station_id),coords:coordsOf(x),available:n!=null&&Number.isFinite(+n)?+n:null,disabled:d!=null&&Number.isFinite(+d)?+d:null,docks:k!=null&&Number.isFinite(+k)?+k:null}}).filter(x=>x.coords);if(!state.stations.length)throw Error('No station coordinates');state.bikeSource='GBFS';}catch(err){try{const found=[];for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BIZI_FALLBACK}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const coords=coordsOf(st);if(!coords)continue;const n=st.bicisDisponibles,k=st.anclajesDisponibles;found.push({name:String(st.title??st.nombre??st.id),coords,available:n!=null&&Number.isFinite(+n)?+n:null,disabled:null,docks:k!=null&&Number.isFinite(+k)?+k:null})}if(batch.length<500)break}if(!found.length)throw Error('No municipal station data');if(epoch!==state.liveEpoch||!state.liveMode)return;state.stations=found;state.bikeSource='Municipal API (out-of-service status unknown)';}catch(e){if(epoch!==state.liveEpoch||!state.liveMode)return;state.bikeError=e.message;state.stations=[];state.bikeSource=''}}state.bikeFetched=Date.now();bikeMarkers();report()}
@@ -104,11 +104,17 @@ function applyRecordedFrame(frame){
  state.stations=(frame?.bizi?.stations||[]).filter(x=>Array.isArray(x.coords)&&x.coords.length===2).map(x=>({
   name:stationName(x.name,x.id),coords:x.coords,available:x.available??null,disabled:x.disabled??null,docks:x.docks??null
  }));
- state.stops=(frame?.bus?.stops||[]).filter(x=>Array.isArray(x.coords)&&x.coords.length===2).map(x=>({
+ const recorded=new Map((frame?.bus?.stops||[]).filter(x=>Array.isArray(x.coords)&&x.coords.length===2).map(x=>[String(x.id),{
   id:String(x.id),name:String(x.name??x.id),coords:x.coords,
   arrivals:Array.isArray(x.arrivals)?x.arrivals.map(a=>({line:String(a.line),minutes:a.minutes??null})):[],
-  checked:1,apiResult:x.status||'unknown'
- }));
+  checked:1,apiResult:x.status||'unknown',source:x.source||null
+ }]));
+ // Current catalogue coordinates are geographical reference, never invented historical arrivals.
+ for(const x of state.latest?.bus?.catalog||[]){
+  if(!recorded.has(String(x.id))&&Array.isArray(x.coords)&&x.coords.length===2)
+   recorded.set(String(x.id),{id:String(x.id),name:String(x.name??x.id),coords:x.coords,arrivals:[],checked:0,apiResult:'unsampled',source:null});
+ }
+ state.stops=[...recorded.values()];
  state.bikeSource=state.snapshotBiziAt?'Recorded GBFS':'';
  state.bikeError='';state.busError='';
  for(const [id,marker] of state.markers)removeBus(id,marker);
