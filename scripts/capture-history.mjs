@@ -117,6 +117,7 @@ try{
   known,unknown,errors,estimates,over15:long,sampling:'rotating',
   nextSampleOffset:nextOffset,completedAt:frame.bus.completedAt,
   sources:{avanza:frame.bus.stops.filter(s=>s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.source==='municipal').length},
+  verifiedBySource:{avanza:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='municipal').length},
   ...(errors===size?{error:'All sampled bus arrival requests failed'}:{}),
   ...(failures.length?{failureExamples:failures}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
