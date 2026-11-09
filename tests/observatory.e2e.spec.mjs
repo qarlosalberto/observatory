@@ -43,11 +43,14 @@ test('cached first paint makes zero municipal API requests',async({page})=>{
  await expect(page.locator('#overviewBike')).toHaveText('4');
  await expect(page.locator('#overviewIncidents')).toHaveText('1');
  await expect(page.locator('#timelineLabel')).toContainText('Latest available capture');
+ await expect(page.locator('#overviewView #map')).toHaveCount(0);
+ await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
  expect(calls).toEqual([]);
 });
 test('timeline changes map geometry and statistics without inventing observations',async({page})=>{
  const calls=await setup(page);
+ await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.timeline?.length)).toBe(2);
  await page.locator('#timelineSlider').evaluate(el=>{el.value='0';el.dispatchEvent(new Event('input',{bubbles:true}))});
  await expect(page.locator('#overviewBike')).toHaveText('0');
@@ -79,6 +82,7 @@ test('tabs and incident filters work from recorded data only',async({page})=>{
 });
 test('live mode requires explicit user action and can return to last capture',async({page})=>{
  const calls=await setup(page);
+ await page.locator('[data-view="buses"]').click();
  await page.locator('#liveButton').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.liveMode)).toBe(true);
  await expect.poll(()=>calls.length).toBeGreaterThan(0);
@@ -103,14 +107,15 @@ test('manual bus requests retry the documented extensionless endpoint after HTTP
  await setup(page);
  await page.route(/poste-autobus\/tuzsa-\d+\.json/,r=>r.fulfill({status:400,contentType:'application/json',body:'{"error":"Bad request"}'}));
  await page.route(/poste-autobus\/tuzsa-\d+$/,r=>r.fulfill(response({destinos:[{linea:'23',primero:'5 min'}]})));
+ await page.locator('[data-view="buses"]').click();
  await page.locator('#liveButton').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.stops.some(s=>s.apiResult==='known')),{timeout:30000}).toBe(true);
 });
 
 test('Bizi stations with four available bikes use the yellow map marker',async({page})=>{
  const calls=await setup(page);
- await expect.poll(()=>page.locator('.bike-pin').evaluateAll(nodes=>nodes.some(node=>node.textContent.trim()==='4'&&node.style.getPropertyValue('--pin')==='#e9a52f'))).toBe(true);
  await page.locator('[data-view="bizi"]').click();
+ await expect.poll(()=>page.locator('.bike-pin').evaluateAll(nodes=>nodes.some(node=>node.textContent.trim()==='4'&&node.style.getPropertyValue('--pin')==='#e9a52f'))).toBe(true);
  await expect(page.locator('body')).toContainText('Bizi: 1–4 bikes');
  expect(calls).toEqual([]);
 });
