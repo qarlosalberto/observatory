@@ -16,12 +16,12 @@ const now=new Date().toISOString();
 const snapshot={at:now,bizi:{status:'unavailable'},bus:{status:'unavailable'},incidents:{status:'unavailable'}};
 const frame={at:now,bizi:{status:'unavailable',stations:[]},bus:{status:'unavailable',sampled:0,population:0,stops:[]}};
 const observations=[];
-const previous=await readJson(paths.latest,null);
 let busCatalog=[];
 const numeric=x=>x!=null&&Number.isFinite(Number(x))?Number(x):null;
 const coordinate=x=>x?.length===2?x.map(v=>Math.round(v*1e6)/1e6):null;
 const readJson=async(path,fallback)=>{try{return JSON.parse(await readFile(path,'utf8'))}catch{return fallback}};
 const saveJson=async(path,data)=>{await mkdir(dirname(path),{recursive:true});await writeFile(path,JSON.stringify(data)+String.fromCharCode(10))};
+const previous=await readJson(paths.latest,null);
 async function get(url){
  for(let attempt=0;attempt<2;attempt++){
   try{
