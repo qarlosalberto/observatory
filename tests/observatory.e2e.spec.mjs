@@ -302,16 +302,46 @@ test('visible coloured bus pin owns its popup without an invisible overlapping h
  expect(pin.text).toContain('4 min');
 });
 
-test('bus pin colour represents the shortest verified wait, not any later bus',async({page})=>{
+test('red marks predicted gaps above 15 minutes even when the first bus arrives soon',async({page})=>{
  await setup(page);
- const withArrivals={...latest,bus:{...latest.bus,stops:[
-  {...stop(798,4),arrivals:[{line:'23',minutes:4},{line:'23',minutes:22}]},
-  stop(799,22)
+ const withArrivals={...latest,bus:{...latest.bus,sampled:5,stops:[
+  {...stop(798,3),arrivals:[
+   {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+   {line:'23',destination:'CENTRO',minutes:40,vehicle:'1002'},
+   {line:'23',destination:'CENTRO',minutes:55,vehicle:'1003'}
+  ]},
+  {...stop(799,2),arrivals:[{line:'23',minutes:2},{line:'23',minutes:17}]},
+  stop(800,16),
+  {...stop(801,3),arrivals:[{line:'23',minutes:3},{line:'24',minutes:10}]},
+  {id:'tuzsa-802',name:'Stop 802',coords:[41.6488,-0.8851],status:'unknown',arrivals:[]}
  ]}};
  await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
  await page.reload();
  await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(5);
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
- expect(pins['tuzsa-798']).toBe('#4274c7');
- expect(pins['tuzsa-799']).toBe('#d94749');
+ expect(pins['tuzsa-798']).toBe('#d94749');
+ expect(pins['tuzsa-799']).toBe('#4274c7'); // 15-minute interval is allowed
+ expect(pins['tuzsa-800']).toBe('#d94749'); // 16 minutes to the first bus
+ expect(pins['tuzsa-801']).toBe('#4274c7'); // two different lines are not consecutive
+ expect(pins['tuzsa-802']).toBe('#89929f');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ await expect(page.locator('.leaflet-popup-content')).toContainText('37 min between buses');
+ await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
+ await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps >15 min');
+});
+
+test('Spanish popups describe the same-route bus interval without mislabeling it as lateness',async({page})=>{
+ await page.context().setExtraHTTPHeaders({'accept-language':'es-ES'});
+ const calls=await setup(page);
+ const withArrivals={...latest,bus:{...latest.bus,stops:[{...stop(798,3),arrivals:[
+  {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+  {line:'23',destination:'CENTRO',minutes:40,vehicle:'1002'}
+ ]}]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ // The locale of a browser context, rather than HTTP Accept-Language alone, determines navigator.language.
+ expect(calls).toEqual([]);
 });
