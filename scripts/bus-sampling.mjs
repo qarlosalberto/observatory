@@ -1,5 +1,6 @@
 // Rotate through the complete, sorted municipal catalogue independently of cron reliability.
-export const BUS_SAMPLE_LIMIT=180;
+export const BUS_SAMPLE_LIMIT=1200;
+export const HISTORY_BUS_SAMPLE_LIMIT=180;
 export function selectBusSample(stops,priorOffset=0,limit=BUS_SAMPLE_LIMIT){
  const total=stops.length;
  if(!total)return {sample:[],size:0,nextOffset:0};

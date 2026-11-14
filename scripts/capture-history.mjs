@@ -2,7 +2,7 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {fetchAvanzaArrivals} from './avanza-arrivals.mjs';
-import {BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from './bus-sampling.mjs';
+import {BUS_SAMPLE_LIMIT,HISTORY_BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from './bus-sampling.mjs';
 import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
@@ -79,10 +79,13 @@ try{
  busCatalog=discovered;
  const {sample,size,nextOffset}=selectBusSample(discovered,previous?.bus?.nextSampleOffset,BUS_SAMPLE_LIMIT);
  frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[],nextSampleOffset:nextOffset};
- let known=0,unknown=0,errors=0,long=0,estimates=0;
- const failures=[];
- for(let offset=0;offset<sample.length;offset+=2){
-  await Promise.all(sample.slice(offset,offset+2).map(async stop=>{
+ let known=0,unknown=0,errors=0,long=0,estimates=0,attempted=0;
+ let incompleteReason=null;
+ const failures=[],deadline=Date.now()+18*60*1000;
+ for(let offset=0;offset<sample.length;offset+=6){
+  if(Date.now()>=deadline){incompleteReason='Collection time budget reached';break}
+  const batch=sample.slice(offset,offset+6);
+  await Promise.all(batch.map(async stop=>{
    try{
     let lines,source='avanza';
     try{lines=await fetchAvanzaArrivals(Number(stop.id.slice('tuzsa-'.length)))}
@@ -108,17 +111,21 @@ try{
     observations.push({stop:stop.id,status:'error',lines:[]});
    }
   }));
-  await new Promise(resolve=>setTimeout(resolve,300));
+  attempted+=batch.length;
+  if(attempted>=30&&errors===attempted){incompleteReason='Provider outage: all first 30 stops failed';break}
+  await new Promise(resolve=>setTimeout(resolve,150));
  }
+ frame.bus.sampled=attempted;
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  frame.bus.completedAt=new Date().toISOString();
- if(errors===size)frame.bus.status='unavailable';
- snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
-  known,unknown,errors,estimates,over15:long,sampling:'rotating',
+ if(errors===attempted)frame.bus.status='unavailable';
+ snapshot.bus={status:errors===attempted?'unavailable':'ok',population:discovered.length,sampled:attempted,
+  known,unknown,errors,estimates,over15:long,sampling:size===discovered.length?'full':'rotating',
+  skipped:size-attempted,...(incompleteReason?{incompleteReason}:{}),
   nextSampleOffset:nextOffset,completedAt:frame.bus.completedAt,
   sources:{avanza:frame.bus.stops.filter(s=>s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.source==='municipal').length},
   verifiedBySource:{avanza:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='municipal').length},
-  ...(errors===size?{error:'All sampled bus arrival requests failed'}:{}),
+  ...(errors===attempted?{error:'All attempted bus arrival requests failed'}:{}),
   ...(failures.length?{failureExamples:failures}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
 
@@ -138,8 +145,10 @@ try{
 // and its original timestamp; it never silently relabels old data as new.
 const catalog=busCatalog.length?busCatalog:(previous?.bus?.catalog??[]);
 const catalogFetchedAt=busCatalog.length?now:(previous?.bus?.catalogFetchedAt??null);
+const historyPick=selectBusSample(frame.bus.stops,previous?.bus?.historySampleOffset,HISTORY_BUS_SAMPLE_LIMIT);
+const historyFrame=frame.bus.stops.length?{...frame,bus:{...frame.bus,sampled:historyPick.size,stops:historyPick.sample}}:frame;
 const busCurrent=frame.bus.status==='ok'
- ?{...frame.bus,capturedAt:now,catalog,catalogFetchedAt}
+ ?{...frame.bus,capturedAt:now,catalog,catalogFetchedAt,historySampleOffset:historyPick.nextOffset}
  :previous?.bus?.status==='ok'?{...previous.bus,catalog,catalogFetchedAt,nextSampleOffset:frame.bus.nextSampleOffset??previous.bus.nextSampleOffset}:
   busCatalog.length?{...frame.bus,catalog,catalogFetchedAt}:(previous?.bus??frame.bus);
 const latest={schema:1,at:frame.bizi.status==='ok'||frame.bus.status==='ok'?now:(previous?.at??null),
@@ -150,7 +159,7 @@ await saveJson(paths.latest,latest);
 // Timeline measurements remain immutable; repair only malformed legacy display names using station IDs.
 const timeline=await readJson(paths.timeline,{schema:1,frames:[]});
 const frames=Array.isArray(timeline?.frames)?timeline.frames:[];
-frames.push(frame);
+frames.push(historyFrame);
 const retained=repairTimelineStationNames(frames.filter(x=>x?.at&&Date.parse(x.at)>=Date.now()-7*86400000).slice(-336),latest.bizi?.stations??[]);
 await saveJson(paths.timeline,{schema:1,updatedAt:now,retentionDays:7,frames:retained});
 

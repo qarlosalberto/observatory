@@ -1,7 +1,8 @@
 name: Capture and publish public-service history
 on:
   schedule:
-    - cron: '7,37 * * * *'
+    # More trigger opportunities; only collect when the previous capture is older than 25 minutes.
+    - cron: '3,13,23,33,43,53 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -21,7 +22,7 @@ concurrency:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 28
     environment:
       name: github-pages
     steps:
@@ -32,18 +33,41 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Check whether a scheduled capture is due
+        id: due
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT_NAME" != "schedule" ]; then
+            echo "capture=true" >> "$GITHUB_OUTPUT"
+          else
+            node --input-type=module <<'NODE'
+          import {readFileSync,appendFileSync} from 'node:fs';
+          let due=true;
+          try {
+            const latest=JSON.parse(readFileSync('site/history/latest.json','utf8'));
+            const completed=Date.parse(latest.bus?.completedAt??latest.bus?.capturedAt??latest.at??'');
+            due=!Number.isFinite(completed)||Date.now()-completed>=25*60*1000;
+          } catch {}
+          appendFileSync(process.env.GITHUB_OUTPUT,'capture='+due+'\n');
+          NODE
+          fi
       - name: Validate collector and source
+        if: steps.due.outputs.capture == 'true'
         run: |
           node --check scripts/capture-history.mjs
           node --check site/app.js
           node --check site/data.js
           npm test
       - name: Capture Zaragoza public APIs
+        if: steps.due.outputs.capture == 'true'
         run: node scripts/capture-history.mjs
       - name: Validate generated JSON files
+        if: steps.due.outputs.capture == 'true'
         run: |
           node -e "for(const p of ['latest','timeline','snapshots','bus-details','incidents']){const fs=require('fs');JSON.parse(fs.readFileSync('site/history/'+p+'.json','utf8'));}"
       - name: Commit new snapshots on main
+        if: steps.due.outputs.capture == 'true'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -74,10 +98,13 @@ jobs:
             git fetch origin main
             git reset --hard origin/main
           fi
-      - uses: actions/configure-pages@v5
-      - uses: actions/upload-pages-artifact@v3
+      - if: steps.due.outputs.capture == 'true'
+        uses: actions/configure-pages@v5
+      - if: steps.due.outputs.capture == 'true'
+        uses: actions/upload-pages-artifact@v3
         with:
           path: ./site
       - name: Publish updated history to GitHub Pages
+        if: steps.due.outputs.capture == 'true'
         id: deployment
         uses: actions/deploy-pages@v4

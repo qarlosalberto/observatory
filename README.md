@@ -8,7 +8,7 @@ An independent public-data dashboard for Zaragoza, with an automatically localiz
 
 The website displays the **most recent precomputed observation by default**, not a new live fetch. This avoids forcing every visitor to wait for dozens of upstream requests. The fast initial data file is `site/history/latest.json`.
 
-A draggable slider on the service map reads `site/history/timeline.json` and displays the measurements actually recorded at each timestamp. Spatial observations are retained for **seven days**. Individual frames represent the sampled bus stops at that capture time; they do **not** reconstruct unobserved stops or interpolate arrival times. The date and coverage of each data source are shown explicitly.
+A draggable slider on the service map reads `site/history/timeline.json` and displays the historical measurements retained at each timestamp. The latest snapshot covers the full queried catalogue; timeline frames retain a rotating subset. Spatial observations are retained for **seven days**. Individual frames represent the sampled bus stops at that capture time; they do **not** reconstruct unobserved stops or interpolate arrival times. The date and coverage of each data source are shown explicitly.
 
 The **Fetch live data** button is an optional, on-demand action. It is never automatically invoked on initial page load. Selecting the latest capture returns to the saved measurements.
 
@@ -16,7 +16,7 @@ The incident browser loads `site/history/incidents.json` by default. Users can e
 
 ## Data collection
 
-The `.github/workflows/history.yml` GitHub Actions workflow attempts collection every 30 minutes (at minutes 07 and 37 UTC), and can also be run manually. Its collector, `scripts/capture-history.mjs`, creates:
+The `.github/workflows/history.yml` GitHub Actions workflow attempts collection every 30 minutes (at ten-minute trigger opportunities (with a freshness guard aiming for one full capture every 30 minutes)), and can also be run manually. Its collector, `scripts/capture-history.mjs`, creates:
 
 | Data file | Purpose | Retention |
 | --- | --- | --- |
@@ -28,12 +28,12 @@ The `.github/workflows/history.yml` GitHub Actions workflow attempts collection 
 
 Scheduled collection requires `GITHUB_TOKEN` permission to write to `main` and GitHub Pages deployment permissions. The collection workflow **publishes the generated site directly**, because commits pushed using `GITHUB_TOKEN` do not trigger a subsequent GitHub Actions push workflow.
 
-Scheduled jobs may run late or be suspended. All initially empty files remain empty until the first successful capture; missing readings must not be presented as zeros or as fresh live data.
+GitHub Actions cron is best-effort: even with more trigger opportunities, scheduled jobs may run late or be suspended. A strict 30-minute service-level guarantee requires an independent external scheduler. All initially empty files remain empty until the first successful capture; missing readings must not be presented as zeros or as fresh live data.
 
 ### Source definitions and interpretation
 
 - **Bizi:** GBFS station information and status, or the municipal station API for on-demand fallback. Missing out-of-service counts are unknown, not zero.
-- **Buses:** Zaragoza City Council's catalogue includes approximately 983 stops. Scheduled capture rotates through **up to 180 stops per run** in rate-limited batches; the stored cursor resumes after the last sampled stop, even if a scheduled invocation is missed. Avanza operator responses retain **every individually announced vehicle** (with route, destination, vehicle and ETA), verified against operator vehicle markers, with municipal API fallback. The dashboard distinguishes verified arrivals, no-prediction replies, errors, and never-sampled stops. It does **not** claim a simultaneous network-wide census, current predictions for unqueried stops, or timetable punctuality.
+- **Buses:** Zaragoza City Council's catalogue includes approximately 983 stops. The latest capture requests **all published stops (up to 1,200 per run)** with bounded concurrency and retries. The seven-day historical timeline retains **180 rotating stops per frame** to bound download sizes; its cursor advances even if an invocation is missed. Avanza operator responses retain **every individually announced vehicle** (with route, destination, vehicle and ETA), verified against operator vehicle markers, with municipal API fallback. The dashboard distinguishes verified arrivals, no-prediction replies, errors, and never-sampled stops. It does **not** claim a simultaneous network-wide census, current predictions for unqueried stops, or timetable punctuality.
 - **Incidents:** Zaragoza City Council's public-space incidence API. Categories include water outages, traffic closures and major disruptions. Date filters are based on published intended intervals, not confirmed completion. The original official notice is linked where its URL is available.
 
 The **History** section groups Bizi, bus and municipal-incident trends. Station-level Bizi frames support counts of stations with **0–4** bikes or **0–1** bikes, recurring shortages, and *interval-censored* episode durations. An episode must have consecutive readings showing a healthy count, then a shortage or disabled count, then recovery; gaps over 90 minutes or missing readings break the chain. Reported times are midpoints of bounded observation intervals, **not** actual bicycle repair times: a disabled bike may be moved or removed. Right-censored and left-censored episodes are excluded from completed-duration averages. Bus charts show sampled stop coverage, individual vehicle predictions, unknown results and API errors without treating missing observations as zero. Route/stop rankings require at least 20 known predictions.
