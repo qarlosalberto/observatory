@@ -1,5 +1,7 @@
 import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX} from './data.js';
 import {analyzeBikeHistory} from './history-analysis.js';
+import {locale,translateText,initTranslations} from './i18n.js';
+initTranslations();
 const $=id=>document.getElementById(id);
 const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',blue:'#4274c7',grey:'#89929f'};
@@ -17,7 +19,7 @@ function renderMetricCards(id,cards){
 }
 function formatSnapshotTime(at){
  if(!at||!Number.isFinite(Date.parse(at)))return 'No recorded data';
- return new Date(at).toLocaleString('en-GB',{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'})+' (Zaragoza)';
+ return new Date(at).toLocaleString(locale,{day:'2-digit',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit',timeZone:'Europe/Madrid'})+' (Zaragoza)';
 }
 function report(){
  const s=summarizeBikes(state.stations),b=summarizeBuses(state.stops);
@@ -25,7 +27,7 @@ function report(){
  const visible=state.map?state.stops.filter(x=>x.id.startsWith('tuzsa-')&&state.map.getBounds().pad(.12).contains(x.coords)):[];
  if(state.liveMode){
   $('status').textContent=`On-demand live requests · ${visible.filter(x=>x.checked>0).length}/${visible.length} visible bus stops queried · ${b.withETA} stops with predictions · ${b.errors} bus errors${state.busLoading?' · Loading…':''}${state.busError?' · '+state.busError:''}`;
-  $('updated').textContent='Live fetch requested · '+new Date().toLocaleTimeString('en-GB');
+  $('updated').textContent='Live fetch requested · '+new Date().toLocaleTimeString(locale);
  }else{
   const busCapture=state.snapshotBusAt?formatSnapshotTime(state.snapshotBusAt):'unavailable';
   const bikeCapture=state.snapshotBiziAt?formatSnapshotTime(state.snapshotBiziAt):'unavailable';
@@ -75,7 +77,7 @@ function report(){
  chart('faultChart','bar',s.pairedStations?['Available','Out of service']:['No data'],s.pairedStations?[s.pairedAvailable,s.pairedFaults]:[0],s.pairedStations?[color.green,color.yellow]:[color.grey]);
  chart('busChart','bar',['0–5 min','6–15 min','>15 min'],[b.quick,b.medium,b.long],[color.green,color.blue,color.red]);
 }
-function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels,datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
+function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels:labels.map(x=>translateText(x)),datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
 function popup(title,details){const div=document.createElement('div'),strong=document.createElement('strong');strong.textContent=title;div.append(strong);for(const [line,cls] of details){const p=document.createElement('div');p.className='popup-line'+(cls?' '+cls:'');p.textContent=line;div.append(p)}return div}
 function bikeMarkers(){
  state.bl.clearLayers();
@@ -236,11 +238,11 @@ async function loadBusRankings(){
 function drawHistoryChart(id,rows,series){
  if(!window.Chart||!$(id))return;
  state.charts[id]?.destroy();
- const labels=rows.map(x=>new Date(x.at).toLocaleString('en-GB',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
+ const labels=rows.map(x=>new Date(x.at).toLocaleString(locale,{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}));
  state.charts[id]=new window.Chart($(id),{
   type:'line',
   data:{labels,datasets:series.map(({label,value,color})=>({
-   label,data:rows.map(value),borderColor:color,backgroundColor:color,
+   label:translateText(label),data:rows.map(value),borderColor:color,backgroundColor:color,
    pointRadius:rows.length<=40?2:0,pointHoverRadius:4,spanGaps:false,tension:.15,borderWidth:2
   }))},
   options:{responsive:true,maintainAspectRatio:false,animation:false,
@@ -337,7 +339,7 @@ async function loadHistory(){
 }
 
 function zaragozaToday(){
- const parts=new Intl.DateTimeFormat('en-GB',{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
+ const parts=new Intl.DateTimeFormat(locale,{timeZone:'Europe/Madrid',year:'numeric',month:'2-digit',day:'2-digit'}).formatToParts(new Date());
  const value=kind=>parts.find(x=>x.type===kind)?.value;
  return [value('year'),value('month'),value('day')].join('-');
 }
@@ -398,7 +400,7 @@ function renderIncidents(){
  const shown=items.filter(x=>(category==='all'||x.type===category)&&(phase==='all'||incidentPhase(x,today)===phase)&&(!term||(x.title+' '+x.street).toLocaleLowerCase().includes(term))).sort((a,b)=>a.title.localeCompare(b.title,'en'));
  const total=state.incidentTotal;
  $('incidentStatus').textContent=shown.length+' matching notices · '+items.length+(total>items.length?' of '+total:'')+' published records retrieved. Dates are planned, not confirmed completion times.';
- $('incidentUpdated').textContent=state.incidentSource+' · checked '+new Date(state.incidentFetched).toLocaleString('en-GB')+(state.incidentError?' · Live source currently unavailable':'');
+ $('incidentUpdated').textContent=state.incidentSource+' · checked '+new Date(state.incidentFetched).toLocaleString(locale)+(state.incidentError?' · Live source currently unavailable':'');
  const list=$('incidentList');list.replaceChildren();
  $('incidentListCount').textContent=shown.length+' notices';
  if(!shown.length)list.append(makeText('p','No matching notices in the retrieved data.','empty-state'));

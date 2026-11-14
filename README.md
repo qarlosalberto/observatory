@@ -1,6 +1,6 @@
 # Observatory — Zaragoza
 
-An independent public-data dashboard for Zaragoza, with a responsive English-language interface and six sections: **Overview, Buses, Bizi, Incidents, History and Methodology**.
+An independent public-data dashboard for Zaragoza, with an automatically localized Spanish (Spain) or English interface and six sections: **Overview, Buses, Bizi, Incidents, History and Methodology**.
 
 **Website:** https://qarlosalberto.github.io/observatory/
 
@@ -62,3 +62,7 @@ Repository documentation, UI labels, accessibility strings, developer-facing err
 Avanza arrivals use `gps.avanzabus.com/index.php/zaragoza/fRefrescaEmpresaExternos` with POST fields `poste` and `coche=0`. Missing or malformed replies remain missing observations.
 
 **Counting bus predictions:** one ETA is recorded for each stop-level arrival announcement. The same Avanza vehicle may be observed at more than one sampled stop. The Buses cards distinguish total ETA entries from distinct operator vehicle IDs; municipal fallback records may not include vehicle identity. Neither figure is a census of all buses circulating in Zaragoza.
+
+## Browser language
+
+The interface detects the browser's **primary language** via `navigator.language`: `es` and `es-*` render Spanish (Spain) with `lang="es-ES"` and Spanish date formatting. English and all other primary languages render the original English UI. No account setting or municipal API request is needed to select the language. This applies to page text, navigation, status messages, Bizi/bus/incident metrics, popups, historical charts, legends and accessibility labels. Official provider-supplied stop/station/street names and Spanish API keys are preserved rather than machine-translated. The language is selected on page load; changing the browser language takes effect after reloading.
