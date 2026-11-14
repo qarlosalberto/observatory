@@ -288,3 +288,16 @@ test.describe('non-Spanish locale falls back to English',()=>{
   expect(calls).toEqual([]);
  });
 });
+
+test('visible coloured bus pin owns its popup without an invisible overlapping hit target',async({page})=>{
+ await setup(page);
+ await page.locator('[data-view="buses"]').click();
+ const pin=await page.evaluate(()=>{
+  const marker=window.__observatoryTest.state.markers.get('tuzsa-798');
+  return {interactive:marker.ring.options.interactive,hasTap:Object.hasOwn(marker,'tap'),text:marker.ring.getPopup().getContent().textContent};
+ });
+ expect(pin.interactive).toBe(true);
+ expect(pin.hasTap).toBe(false);
+ expect(pin.text).toContain('Route 23');
+ expect(pin.text).toContain('4 min');
+});
