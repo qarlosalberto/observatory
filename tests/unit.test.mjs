@@ -243,3 +243,64 @@ test('transient Avanza errors are retried, permanent HTTP errors are not',async(
  await assert.rejects(()=>fetchAvanzaArrivals(744,async()=>{attempts++;return {ok:false,status:400}}),/HTTP 400/);
  assert.equal(attempts,1);
 });
+
+import {BUS_GAP_THRESHOLD,analyzeBusRegularity} from '../site/data.js';
+
+test('bus stop turns red for 37-minute interval even with a first bus in three minutes',()=>{
+ const value=analyzeBusRegularity([
+  {line:'23',destination:'CENTRO',minutes:55,vehicle:'1003'},
+  {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+  {line:'23',destination:'CENTRO',minutes:40,vehicle:'1002'}
+ ]);
+ assert.equal(BUS_GAP_THRESHOLD,15);
+ assert.equal(value.red,true);
+ assert.equal(value.slowFirst,false);
+ assert.equal(value.longGap,true);
+ assert.equal(value.comparedGaps,2);
+ assert.deepEqual(value.routes[0].gaps,[{from:3,to:40,minutes:37},{from:40,to:55,minutes:15}]);
+});
+
+test('regularity detection includes initial long waits but requires strictly over 15 minutes',()=>{
+ const boundary=analyzeBusRegularity([{line:'21',minutes:2},{line:'21',minutes:17}]);
+ assert.equal(boundary.red,false);
+ assert.equal(boundary.longGap,false);
+ assert.equal(analyzeBusRegularity([{line:'21',minutes:2},{line:'21',minutes:18}]).red,true);
+ const lone=analyzeBusRegularity([{line:'21',minutes:16}]);
+ assert.equal(lone.red,true);
+ assert.equal(lone.slowFirst,true);
+ assert.equal(lone.longGap,false);
+ assert.equal(lone.comparedGaps,0);
+ assert.equal(analyzeBusRegularity([{line:'21',minutes:3}]).red,false);
+});
+
+test('bus headways never mix lines, destinations, missing ETAs or repeated vehicles',()=>{
+ const value=analyzeBusRegularity([
+  {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+  {line:'23',destination:'centro',minutes:4,vehicle:'1001'},
+  {line:'23',destination:'CENTRO',minutes:null},
+  {line:'23',destination:'BARRIO',minutes:40,vehicle:'1002'},
+  {line:'24',destination:'CENTRO',minutes:7,vehicle:'1003'},
+  {line:'24',destination:'CENTRO',minutes:17,vehicle:'1004'}
+ ]);
+ assert.equal(value.routes.length,3);
+ assert.equal(value.comparedGaps,1);
+ assert.equal(value.longGap,false);
+ assert.equal(value.slowFirst,true);
+ assert.deepEqual(value.routes.find(x=>x.line==='24').gaps,[{from:7,to:17,minutes:10}]);
+ assert.equal(value.routes.find(x=>x.destination==='CENTRO'&&x.line==='23').gaps.length,0);
+ assert.equal(analyzeBusRegularity([{line:'23',minutes:null},{line:'23',minutes:NaN}]).hasArrivals,false);
+});
+
+test('bus aggregates include red stops and stops with actual measured headways',()=>{
+ const stops=[
+  {checked:1,arrivals:[{line:'23',minutes:3},{line:'23',minutes:40}],apiResult:'known'},
+  {checked:1,arrivals:[{line:'23',minutes:2},{line:'23',minutes:15}],apiResult:'known'},
+  {checked:1,arrivals:[{line:'23',minutes:18}],apiResult:'known'},
+  {checked:0,arrivals:[],apiResult:'unsampled'}
+ ];
+ const stats=summarizeBuses(stops);
+ assert.equal(stats.redStops,2);
+ assert.equal(stats.longGapStops,1);
+ assert.equal(stats.comparedGaps,2);
+ assert.equal(stats.withETA,3);
+});
