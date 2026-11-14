@@ -79,10 +79,13 @@ try{
  busCatalog=discovered;
  const {sample,size,nextOffset}=selectBusSample(discovered,previous?.bus?.nextSampleOffset,BUS_SAMPLE_LIMIT);
  frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[],nextSampleOffset:nextOffset};
- let known=0,unknown=0,errors=0,long=0,estimates=0;
- const failures=[];
+ let known=0,unknown=0,errors=0,long=0,estimates=0,attempted=0;
+ let incompleteReason=null;
+ const failures=[],deadline=Date.now()+18*60*1000;
  for(let offset=0;offset<sample.length;offset+=6){
-  await Promise.all(sample.slice(offset,offset+6).map(async stop=>{
+  if(Date.now()>=deadline){incompleteReason='Collection time budget reached';break}
+  const batch=sample.slice(offset,offset+6);
+  await Promise.all(batch.map(async stop=>{
    try{
     let lines,source='avanza';
     try{lines=await fetchAvanzaArrivals(Number(stop.id.slice('tuzsa-'.length)))}
@@ -108,17 +111,21 @@ try{
     observations.push({stop:stop.id,status:'error',lines:[]});
    }
   }));
+  attempted+=batch.length;
+  if(attempted>=30&&errors===attempted){incompleteReason='Provider outage: all first 30 stops failed';break}
   await new Promise(resolve=>setTimeout(resolve,150));
  }
+ frame.bus.sampled=attempted;
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  frame.bus.completedAt=new Date().toISOString();
- if(errors===size)frame.bus.status='unavailable';
- snapshot.bus={status:errors===size?'unavailable':'ok',population:discovered.length,sampled:size,
-  known,unknown,errors,estimates,over15:long,sampling:'rotating',
+ if(errors===attempted)frame.bus.status='unavailable';
+ snapshot.bus={status:errors===attempted?'unavailable':'ok',population:discovered.length,sampled:attempted,
+  known,unknown,errors,estimates,over15:long,sampling:size===discovered.length?'full':'rotating',
+  skipped:size-attempted,...(incompleteReason?{incompleteReason}:{}),
   nextSampleOffset:nextOffset,completedAt:frame.bus.completedAt,
   sources:{avanza:frame.bus.stops.filter(s=>s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.source==='municipal').length},
   verifiedBySource:{avanza:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='municipal').length},
-  ...(errors===size?{error:'All sampled bus arrival requests failed'}:{}),
+  ...(errors===attempted?{error:'All attempted bus arrival requests failed'}:{}),
   ...(failures.length?{failureExamples:failures}:{})};
 }catch(e){snapshot.bus.error=String(e.message).slice(0,160)}
 
