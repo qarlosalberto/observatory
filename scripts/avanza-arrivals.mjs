@@ -14,7 +14,7 @@ export function parseAvanzaArrivals(data){
  if(!html){if(reported.size)throw Error('Avanza vehicle mismatch');return []}
  const blocks=[...html.matchAll(/<strong\b[^>]*>([\s\S]*?)<\/strong>/gi)];
  if(!blocks.length)throw Error('Avanza route headings missing');
- let recognized=0;
+ let recognized=0,candidates=0;
  for(let i=0;i<blocks.length;i++){
   const heading=blocks[i][1],left=heading.search(/<i\b/i),right=heading.search(/<\/i\s*>/i);
   if(left<0||right<left)continue;
@@ -24,6 +24,7 @@ export function parseAvanzaArrivals(data){
   const line=/^\d+$/.test(number)?String(Number(number)):number.toUpperCase();
   const body=html.slice(blocks[i].index+blocks[i][0].length,blocks[i+1]?.index??html.length);
   for(const [,vehicle,inside] of body.matchAll(/<a\b[^>]*href=["'][^"']*\/fParadas\/\d+\/(\d+)[^"']*["'][^>]*>([\s\S]*?)<\/a>/gi)){
+   candidates++;
    const value=strip(inside).match(/^(\d+)\s*\[\s*(-?\d+)\s*min(?:s|utos)?\s*\]$/i);
    if(!value||value[1]!==vehicle)continue;
    const estimate=Number(value[2]);
@@ -42,7 +43,7 @@ export function parseAvanzaArrivals(data){
   }
  }
  if(!recognized)throw Error('Unrecognized Avanza headings');
- if(!arrivals.length&&reported.size)throw Error('Avanza arrivals could not be verified');
+ if(!arrivals.length&&(reported.size||candidates))throw Error('Avanza arrivals could not be verified');
  return arrivals.sort((a,b)=>a.minutes-b.minutes||a.line.localeCompare(b.line,'en',{numeric:true}));
 }
 
