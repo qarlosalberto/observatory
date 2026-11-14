@@ -274,6 +274,21 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.historyBiziChart?.data.datasets[0]?.label)).toBe('Con menos de 2 bicis');
   expect(calls).toEqual([]);
  });
+ test('translates the long bus-to-bus gap shown on a red map marker',async({page})=>{
+  await setup(page);
+  const withArrivals={...latest,bus:{...latest.bus,stops:[{...stop(798,3),arrivals:[
+   {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+   {line:'23',destination:'CENTRO',minutes:40,vehicle:'1002'}
+  ]}]}};
+  await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
+  await page.reload();
+  await page.locator('[data-view="buses"]').click();
+  const red=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.options.fillColor);
+  expect(red).toBe('#d94749');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('intervalo de 37 min');
+  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 min'})).toHaveCount(1);
+ });
 });
 test.describe('non-Spanish locale falls back to English',()=>{
  test.use({locale:'fr-FR'});
@@ -331,17 +346,3 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps >15 min');
 });
 
-test('Spanish popups describe the same-route bus interval without mislabeling it as lateness',async({page})=>{
- await page.context().setExtraHTTPHeaders({'accept-language':'es-ES'});
- const calls=await setup(page);
- const withArrivals={...latest,bus:{...latest.bus,stops:[{...stop(798,3),arrivals:[
-  {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
-  {line:'23',destination:'CENTRO',minutes:40,vehicle:'1002'}
- ]}]}};
- await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
- await page.reload();
- await page.locator('[data-view="buses"]').click();
- await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
- // The locale of a browser context, rather than HTTP Accept-Language alone, determines navigator.language.
- expect(calls).toEqual([]);
-});
