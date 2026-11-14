@@ -101,7 +101,7 @@ function busMarkers(){
   const ordered=[...state.stops].sort((a,b)=>Number((a.arrivals||[]).some(x=>x.minutes!==null))-Number((b.arrivals||[]).some(x=>x.minutes!==null)));
   for(const stop of ordered){
    if(!bounds.contains(stop.coords))continue;
-   const valid=(stop.arrivals||[]).filter(a=>a.minutes!==null),red=valid.some(a=>a.minutes>15);
+   const valid=(stop.arrivals||[]).filter(a=>a.minutes!==null),red=valid.length>0&&valid.every(a=>a.minutes>15);
    active.add(stop.id);
    const hex=!valid.length?color.grey:red?color.red:color.blue;
    const size=!valid.length?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
