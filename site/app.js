@@ -1,4 +1,4 @@
-import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX} from './data.js';
+import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX,BUS_GAP_THRESHOLD,analyzeBusRegularity} from './data.js';
 import {analyzeBikeHistory} from './history-analysis.js';
 import {locale,translateText,initTranslations} from './i18n.js';
 initTranslations();
@@ -51,13 +51,14 @@ function report(){
   ['Distinct operator vehicle IDs',observedVehicles||'—','From Avanza sampled stops only; not the city fleet'],
   ['Sampled stop coverage',state.snapshotBusPopulation?countShare(state.snapshotBusSampled,state.snapshotBusPopulation):'—','Queried in this captured frame'],
   ['Stops with verified arrivals',countShare(b.withETA,b.queried),b.queried+' queried stops'],
-  ['Waits above 15 min',countShare(b.long,b.estimates),'Waits, not timetable delays']
+  ['Stops with waits or gaps >15 min',countShare(b.redStops,b.withETA),b.longGapStops+' stops with long observed intervals']
  ]);
  renderMetricCards('busKpis',[
   ['Stop-level arrival estimates',b.estimates||'—',b.withETA+' stops with an estimate'],
    ['Distinct operator vehicle IDs',observedVehicles||'—','One vehicle can appear at several stops'],
   ['Predicted waits ≤5 min',countShare(b.quick,b.estimates),'Known predictions only'],
   ['Waits >15 min',countShare(b.long,b.estimates),'Not proof of lateness'],
+  ['Stops with waits or gaps >15 min',countShare(b.redStops,b.withETA),b.longGapStops+' stops with long observed intervals'],
   ['API requests without a prediction',countShare(b.unknown,b.queried),'Separate from '+b.errors+' API errors']
  ]);
  renderMetricCards('biziKpis',[
@@ -101,7 +102,8 @@ function busMarkers(){
   const ordered=[...state.stops].sort((a,b)=>Number((a.arrivals||[]).some(x=>x.minutes!==null))-Number((b.arrivals||[]).some(x=>x.minutes!==null)));
   for(const stop of ordered){
    if(!bounds.contains(stop.coords))continue;
-   const valid=(stop.arrivals||[]).filter(a=>a.minutes!==null),red=valid.length>0&&valid.every(a=>a.minutes>15);
+   const valid=(stop.arrivals||[]).filter(a=>Number.isFinite(a.minutes)&&a.minutes>=0&&a.minutes<=180);
+   const regularity=analyzeBusRegularity(stop.arrivals),red=regularity.red;
    active.add(stop.id);
    const hex=!valid.length?color.grey:red?color.red:color.blue;
    const size=!valid.length?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
@@ -109,6 +111,14 @@ function busMarkers(){
    const details=[
     [valid.length?(state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(stop.observedAt||state.snapshotBusAt)):'No verified arrival prediction'],
     ...(valid.length&&stop.source?[['Provider: '+(stop.source==='avanza'?'Avanza operator':'Zaragoza municipal API')]]:[]),
+    ...regularity.routes.flatMap(route=>{
+     const label='Route '+route.line+(route.destination?' → '+route.destination:'');
+     return [
+      ...(route.slowFirst?[[label+': first predicted bus in '+route.first+' min','over']]:[]),
+      ...route.gaps.map(g=>[label+': '+g.from+' → '+g.to+' min · '+g.minutes+' min between buses',g.minutes>BUS_GAP_THRESHOLD?'over':''])
+     ];
+    }),
+    ...(regularity.hasArrivals&&!regularity.comparedGaps?[['No consecutive buses for the same route and destination to compare','unknown']]:[]),
     ...(valid.length?stop.arrivals.map(a=>['Route '+a.line+(a.destination?' → '+a.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'')+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']):[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
    ];
    const signature=JSON.stringify([shape,details,stop.name]);
