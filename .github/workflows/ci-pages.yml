@@ -28,12 +28,15 @@ jobs:
           test -s site/index.html
           test -s site/app.js
           test -s site/data.js
+          test -s site/i18n.js
           test -s site/style.css
           node --check site/app.js
           node --check site/data.js
+          node --check site/i18n.js
           grep -q '<script type="module" src="./app.js"' site/index.html
   browser-e2e:
-    runs-on: ubuntu-latest
+    # Playwright Chromium does not support the current ubuntu-latest (26.04) image.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4

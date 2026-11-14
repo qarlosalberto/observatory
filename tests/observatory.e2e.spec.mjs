@@ -232,3 +232,59 @@ test('bus statistics distinguish multiple stop-level ETAs from unique reported v
  await expect(cards.filter({hasText:'Stop-level arrival estimates'}).locator('strong')).toHaveText('2');
  await expect(cards.filter({hasText:'Distinct operator vehicle IDs'}).locator('strong')).toHaveText('1');
 });
+
+
+test.describe('Spanish (Spain) browser localization',()=>{
+ test.use({locale:'es-ES'});
+ test('renders all navigation, page metadata and the recorded overview in Spanish',async({page})=>{
+  const calls=await setup(page);
+  await expect(page.locator('html')).toHaveAttribute('lang','es-ES');
+  await expect(page).toHaveTitle('Observatory — Servicios públicos de Zaragoza');
+  await expect(page.locator('meta[name="description"]')).toHaveAttribute('content',/visión independiente/);
+  await expect(page.locator('[data-view="overview"]')).toContainText('Resumen');
+  await expect(page.locator('[data-view="incidents"]')).toContainText('Incidencias');
+  await expect(page.locator('[data-view="history"]')).toContainText('Histórico');
+  await expect(page.locator('[data-view="method"]')).toContainText('Metodología');
+  await expect(page.locator('#overviewBikeKpis')).toContainText('Estaciones con menos de 5 bicis');
+  await expect(page.locator('#overviewBusKpis')).toContainText('Estimaciones de llegada por parada');
+  await expect(page.locator('#overviewIncidentKpis')).toContainText('Avisos activos');
+  await expect(page.locator('#siteIntro')).toBeHidden();
+  await page.locator('#aboutToggle').click();
+  await expect(page.locator('#siteIntro')).toContainText('Una visión más clara de');
+  await expect(page.locator('#aboutToggle')).toHaveAttribute('aria-label','Ocultar información sobre Observatory');
+  expect(calls).toEqual([]);
+ });
+ test('translates cached data cards, chart legends, map popups and history labels',async({page})=>{
+  const calls=await setup(page);
+  await page.locator('[data-view="bizi"]').click();
+  await expect(page.locator('#biziKpis')).toContainText('Bicicletas disponibles');
+  await expect(page.locator('#bikeNote')).toContainText('estaciones notifican disponibilidad');
+  await expect(page.locator('#repairFilter')).toContainText('Mostrar solo estaciones');
+  await expect(page.locator('#timelineBadge')).toContainText('Registrado');
+  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.bikeChart?.data.labels[0])).toBe('5 o más disponibles');
+  await page.evaluate(()=>window.__observatoryTest.state.bl.getLayers()[0].openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Disponibles: 4');
+  await page.locator('[data-view="incidents"]').click();
+  await expect(page.locator('#incidentSearch')).toHaveAttribute('placeholder','Buscar por calle o título…');
+  await expect(page.locator('#incidentList')).toContainText('Ver aviso oficial');
+  await expect(page.locator('#incidentList')).toContainText('Fin previsto');
+  await expect(page.locator('#incidentList')).toContainText('CENTRAL AVENUE');
+  await page.locator('[data-view="history"]').click();
+  await expect(page.locator('#historyView')).toContainText('Cómo se calculan las estimaciones de duración');
+  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.historyBiziChart?.data.datasets[0]?.label)).toBe('Con menos de 2 bicis');
+  expect(calls).toEqual([]);
+ });
+});
+test.describe('non-Spanish locale falls back to English',()=>{
+ test.use({locale:'fr-FR'});
+ test('uses the unchanged English UI without requesting municipal APIs automatically',async({page})=>{
+  const calls=await setup(page);
+  await expect(page.locator('html')).toHaveAttribute('lang','en');
+  await expect(page).toHaveTitle('Observatory — Zaragoza Public Services');
+  await expect(page.locator('[data-view="overview"]')).toContainText('Overview');
+  await expect(page.locator('#overviewBikeKpis')).toContainText('Available bikes');
+  await page.locator('[data-view="bizi"]').click();
+  await expect(page.locator('#biziKpis')).toContainText('Stations below 5 bikes');
+  expect(calls).toEqual([]);
+ });
+});

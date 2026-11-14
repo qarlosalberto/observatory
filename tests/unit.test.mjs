@@ -197,3 +197,19 @@ test('captured bus records keep every vehicle and destination without inventing 
  assert.equal(serializeBusArrivals(source).length,3);
  assert.deepEqual(serializeBusArrivals([{line:'31',minutes:null}]),[{line:'31',minutes:null}]);
 });
+
+
+import {resolveLanguage,translateText} from '../site/i18n.js';
+test('Spanish is selected only when the primary browser language is Spanish',()=>{
+ for(const value of ['es','es-ES','es-MX','es-419','ES_es'])assert.equal(resolveLanguage(value),'es-ES');
+ for(const value of ['en','en-US','en-GB','fr-FR','de-DE','ca-ES','zh-CN',''])assert.equal(resolveLanguage(value),'en');
+});
+test('Spanish interface messages retain official provider names and interpolate real counts',()=>{
+ assert.equal(translateText('Available bikes','es-ES'),'Bicicletas disponibles');
+ assert.equal(translateText('2 of 3 stations reporting','es-ES'),'2 de 3 estaciones con datos');
+ assert.equal(translateText('Route 23 → CENTER · vehicle 9001: 4 min','es-ES'),'Línea 23 → CENTER · vehículo 9001: 4 min');
+ assert.equal(translateText('More information about Observatory','es-ES'),'Más información sobre Observatory');
+ assert.equal(translateText('Plaza del Pilar','es-ES'),'Plaza del Pilar');
+ assert.equal(translateText('Available bikes','en'),'Available bikes');
+ assert.equal(translateText('Available bikes','fr-FR'),'Available bikes');
+});
