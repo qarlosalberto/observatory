@@ -301,3 +301,17 @@ test('visible coloured bus pin owns its popup without an invisible overlapping h
  expect(pin.text).toContain('Route 23');
  expect(pin.text).toContain('4 min');
 });
+
+test('bus pin colour represents the shortest verified wait, not any later bus',async({page})=>{
+ await setup(page);
+ const withArrivals={...latest,bus:{...latest.bus,stops:[
+  {...stop(798,4),arrivals:[{line:'23',minutes:4},{line:'23',minutes:22}]},
+  stop(799,22)
+ ]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
+ expect(pins['tuzsa-798']).toBe('#4274c7');
+ expect(pins['tuzsa-799']).toBe('#d94749');
+});
