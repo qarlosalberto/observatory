@@ -47,9 +47,9 @@ export function initTranslations(root=document){
  translateTree(root);
  const observer=new MutationObserver(records=>{
   for(const record of records){
-   if(record.type==='characterData')translateTree(record.target);
+   if(record.type==='characterData'||record.type==='attributes')translateTree(record.target);
    for(const node of record.addedNodes??[])translateTree(node);
   }
  });
- observer.observe(root.body,{childList:true,subtree:true,characterData:true});
+ observer.observe(root.body,{childList:true,subtree:true,characterData:true,attributes:true,attributeFilter:['aria-label','title','placeholder','alt']});
 }
