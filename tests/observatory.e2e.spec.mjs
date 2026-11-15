@@ -631,3 +631,34 @@ test('stop 78 Avanza line 35 with 6 and 21 minutes renders standard red',async({
  await page.locator('#busLineFilter').fill('35');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#d94749');
 });
+
+test('selected bus line draws a verified ordered path and All lines/Bizi clear every route overlay',async({page})=>{
+ await setup(page);
+ await page.route('**/history/routes/23.json',r=>r.fulfill(response({
+  schema:1,line:'23',source:'Zaragoza City Council',paths:[
+   [[41.6488,-.8891],[41.6492,-.8889],[41.6488,-.8881]]
+  ]
+ })));
+ await page.route('https://idezar-sig.zaragoza.es/**',r=>r.abort());
+ await page.locator('[data-view="buses"]').click();
+ expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ await page.locator('#busLineFilter').fill('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+ const path=await page.evaluate(()=>{
+  const state=window.__observatoryTest.state;
+  return state.busRouteLayer.getLayers()[0].getLatLngs().map(x=>[x.lat,x.lng]);
+ });
+ expect(path).toEqual([[41.6488,-.8891],[41.6492,-.8889],[41.6488,-.8881]]);
+ await expect(page.locator('#busRouteStatus')).toContainText('published itinerary');
+ await page.locator('#clearBusLineFilter').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteWmsLayer)).toBeNull();
+ await expect(page.locator('#busRouteStatus')).toBeHidden();
+ await page.locator('#busLineFilter').fill('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+ await page.locator('[data-view="bizi"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteWmsLayer)).toBeNull();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+});
