@@ -1,9 +1,9 @@
-import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX,BUS_GAP_THRESHOLD,analyzeBusRegularity} from './data.js';
+import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX,BUS_GAP_THRESHOLD,analyzeBusRegularity,normalizeBusLine,busLinesOf,arrivalsForLine} from './data.js';
 import {analyzeBikeHistory} from './history-analysis.js';
 import {locale,translateText,initTranslations} from './i18n.js';
 initTranslations();
 const $=id=>document.getElementById(id);
-const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null};
+const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null,busLineFilter:'',busCatalogueLines:new Map()};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',darkRed:'#871a2c',blue:'#4274c7',grey:'#89929f'};
 const percent=(count,total)=>total>0?Math.round(100*count/total)+'%':'—';
 const countShare=(count,total)=>total>0?`${count} (${percent(count,total)})`:'—';
@@ -94,23 +94,65 @@ function bikeMarkers(){
   L.marker(st.coords,{icon,zIndexOffset:750}).bindPopup(popup('Bizi · '+st.name,details)).addTo(state.bl);
  }
 }
+function linesForStop(stop){
+ return [...new Set([...(state.busCatalogueLines.get(stop.id)||[]),...busLinesOf(stop)])];
+}
+function stopServesSelectedLine(stop){
+ return !state.busLineFilter||linesForStop(stop).includes(state.busLineFilter);
+}
+function shownBusArrivals(stop){
+ return arrivalsForLine(stop.arrivals,state.busLineFilter);
+}
+function availableBusLines(){
+ const lines=new Set();
+ for(const catalogLines of state.busCatalogueLines.values())for(const line of catalogLines)lines.add(line);
+ for(const stop of state.stops)for(const line of busLinesOf(stop))lines.add(line);
+ return [...lines].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
+}
+function updateBusLineSelector(){
+ const lines=availableBusLines(),options=$('busLineOptions');
+ options.replaceChildren(...lines.map(line=>{
+  const item=document.createElement('option');item.value=line;return item;
+ }));
+ const input=$('busLineFilter'),typed=input.value.trim(),status=$('busLineFilterStatus');
+ if(typed&&!lines.includes(normalizeBusLine(typed))){
+  status.textContent='Choose a line from the list to filter the map. No route filter is active.';
+ }else if(state.busLineFilter){
+  const count=state.stops.filter(stopServesSelectedLine).length;
+  status.textContent=count+' known stops for line '+state.busLineFilter+'. Only this line controls the map colours; unavailable arrivals stay grey. Chart statistics include all lines.';
+ }else{
+  status.textContent='All bus stops shown. This filter changes the map only.';
+ }
+}
+function setBusLineFilter(text){
+ const line=normalizeBusLine(text);
+ const valid=line&&availableBusLines().includes(line)?line:'';
+ if(valid!==state.busLineFilter){
+  state.busLineFilter=valid;
+  for(const [id,marker] of state.markers)removeBus(id,marker);
+  busMarkers();
+  if(state.liveMode)void loadVisibleBusETAs();
+ }
+ updateBusLineSelector();
+}
 function removeBus(id,marker){state.sl.removeLayer(marker.ring);state.markers.delete(id)}
 function busMarkers(){
  if(!state.map)return;
  const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();
  if($('showBus').checked&&zoom>=12){
   // Draw unknown stops first so the visible coloured stop receives its own click.
-  const ordered=[...state.stops].sort((a,b)=>Number((a.arrivals||[]).some(x=>x.minutes!==null))-Number((b.arrivals||[]).some(x=>x.minutes!==null)));
+  const ordered=state.stops.filter(stopServesSelectedLine).sort((a,b)=>Number(shownBusArrivals(a).some(x=>Number.isFinite(x.minutes)))-Number(shownBusArrivals(b).some(x=>Number.isFinite(x.minutes))));
   for(const stop of ordered){
    if(!bounds.contains(stop.coords))continue;
-   const valid=(stop.arrivals||[]).filter(a=>Number.isFinite(a.minutes)&&a.minutes>=0&&a.minutes<=180);
-   const regularity=analyzeBusRegularity(stop.arrivals),red=regularity.red;
+   const arrivals=shownBusArrivals(stop);
+   const valid=arrivals.filter(a=>Number.isFinite(a.minutes)&&a.minutes>=0&&a.minutes<=180);
+   const regularity=analyzeBusRegularity(arrivals),red=regularity.red;
    active.add(stop.id);
    const hex=!valid.length?color.grey:regularity.darkRed?color.darkRed:red?color.red:color.blue;
    const size=!valid.length?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
    const shape={radius:size,color:'#fff',weight:size>=17?2.5:1.5,fillColor:hex,fillOpacity:.94};
    const details=[
-    [valid.length?(state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(stop.observedAt||state.snapshotBusAt)):'No verified arrival prediction'],
+    [valid.length?(state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(stop.observedAt||state.snapshotBusAt)) :state.busLineFilter?'No verified arrival prediction for line '+state.busLineFilter:'No verified arrival prediction'],
     ...(valid.length&&stop.source?[['Provider: '+(stop.source==='avanza'?'Avanza operator':'Zaragoza municipal API')]]:[]),
     ...regularity.routes.flatMap(route=>{
      const label='Route '+route.line+(route.destination?' → '+route.destination:'');
@@ -120,7 +162,7 @@ function busMarkers(){
      ];
     }),
     ...(regularity.hasArrivals&&!regularity.comparedGaps?[['No consecutive buses for the same route and destination to compare','unknown']]:[]),
-    ...(valid.length?stop.arrivals.map(a=>['Route '+a.line+(a.destination?' → '+a.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'')+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']):[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
+    ...(valid.length?arrivals.map(a=>['Route '+a.line+(a.destination?' → '+a.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'')+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']):[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
    ];
    const signature=JSON.stringify([shape,details,stop.name]);
    let marker=state.markers.get(stop.id);
