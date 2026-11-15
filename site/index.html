@@ -62,7 +62,7 @@
       <p id="busLineFilterStatus" class="fineprint" role="status" aria-live="polite">All bus stops shown. This filter changes the map only.</p>
     </div>
     <div id="busesMapHost"></div>
-    <p class="fineprint">A bus stop is dark red when the first announced bus on a route and destination is more than 18 minutes away, or when two successive announced buses on that same service are separated by more than 18 minutes. Standard red applies to waits or gaps over 15 minutes and up to 18. These are observed predictions, not evidence of timetable lateness.</p>
+    <p class="fineprint">A bus stop is dark red when the first announced bus on a route and destination is more than 18 minutes away, or when two successive announced buses on that same service are separated by more than 18 minutes. Standard red applies to waits or gaps of 15 to 18 minutes, inclusive. These are observed predictions, not evidence of timetable lateness.</p>
   </section>
   <section id="biziView" class="view hidden" role="tabpanel" aria-labelledby="tab-bizi" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Recorded API data</span></div>
@@ -92,7 +92,7 @@
         <button type="button" id="liveButton" class="timeline-live">Fetch live data <span aria-hidden="true">↗</span></button>
       </div>
     </div>
-    <div class="legend"><span class="bike-legend"><i style="--c:#13865d"></i>Bizi: 5+ bikes</span><span class="bike-legend"><i style="--c:#f1aa41"></i>Bizi: 1–4 bikes</span><span class="bike-legend"><i style="--c:#e25c61"></i>Empty Bizi</span><span class="bike-legend"><i style="--c:#89929f"></i>Unknown Bizi</span><span class="bus-legend"><i style="--c:#5188e2"></i>Bus: no wait/gap over 15 min detected</span><span class="bus-legend"><i style="--c:#d94749"></i>Bus: wait or gap &gt;15 and ≤18 min</span><span class="bus-legend"><i style="--c:#871a2c"></i>Bus: wait or gap &gt;18 min</span><span class="bus-legend"><i style="--c:#89929f"></i>Bus stop · no verified prediction</span></div>
+    <div class="legend"><span class="bike-legend"><i style="--c:#13865d"></i>Bizi: 5+ bikes</span><span class="bike-legend"><i style="--c:#f1aa41"></i>Bizi: 1–4 bikes</span><span class="bike-legend"><i style="--c:#e25c61"></i>Empty Bizi</span><span class="bike-legend"><i style="--c:#89929f"></i>Unknown Bizi</span><span class="bus-legend"><i style="--c:#5188e2"></i>Bus: no wait/gap ≥15 min detected</span><span class="bus-legend"><i style="--c:#d94749"></i>Bus: wait or gap ≥15 and ≤18 min</span><span class="bus-legend"><i style="--c:#871a2c"></i>Bus: wait or gap &gt;18 min</span><span class="bus-legend"><i style="--c:#89929f"></i>Bus stop · no verified prediction</span></div>
     <p id="status" role="status" aria-live="polite" class="status">Loading the latest recorded snapshot…</p>
   </div>
   <section id="incidentsView" class="view hidden" role="tabpanel" aria-labelledby="tab-incidents" tabindex="0">
