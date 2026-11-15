@@ -88,6 +88,7 @@ export const BUS_DARK_RED_WAIT_THRESHOLD=18;
  * Compare successive predictions only within the same route and destination.
  * ETAs are minutes from one observation, not proof of published headways or punctuality.
  * A single predicted bus cannot establish the interval to an unreported next bus.
+ * Distinct observations expose their first wait or preceding same-service gap for popup colouring.
  */
 export function analyzeBusRegularity(arrivals=[]){
  const byService=new Map();
@@ -102,19 +103,23 @@ export function analyzeBusRegularity(arrivals=[]){
   if(vehicle&&service.vehicles.has(vehicle)){
    // Two observations of the same physical vehicle do not form an interval.
    const existing=service.vehicles.get(vehicle);
-   existing.minutes=Math.min(existing.minutes,a.minutes);
+   if(a.minutes<existing.minutes){existing.minutes=a.minutes;existing.arrival=a}
   }else{
-   const entry={minutes:a.minutes};
+   const entry={minutes:a.minutes,arrival:a};
    service.entries.push(entry);
    if(vehicle)service.vehicles.set(vehicle,entry);
   }
  }
  const routes=[...byService.values()].map(({line,destination,entries})=>{
-  const times=entries.map(a=>a.minutes).sort((a,b)=>a-b);
-  const gaps=[];
+  const sorted=entries.slice().sort((a,b)=>a.minutes-b.minutes);
+  const times=sorted.map(a=>a.minutes),gaps=[];
   for(let i=1;i<times.length;i++)gaps.push({from:times[i-1],to:times[i],minutes:times[i]-times[i-1]});
+  const observations=sorted.map((entry,i)=>({
+   arrival:entry.arrival,minutes:entry.minutes,
+   first:i===0,interval:i===0?entry.minutes:entry.minutes-times[i-1]
+  }));
   const first=times[0];
-  return {line,destination,first,gaps,slowFirst:first>BUS_GAP_THRESHOLD,longGap:gaps.some(x=>x.minutes>BUS_GAP_THRESHOLD)};
+  return {line,destination,first,gaps,observations,slowFirst:first>BUS_GAP_THRESHOLD,longGap:gaps.some(x=>x.minutes>BUS_GAP_THRESHOLD)};
  }).sort((a,b)=>a.line.localeCompare(b.line,undefined,{numeric:true})||a.destination.localeCompare(b.destination));
  return {
   routes,
