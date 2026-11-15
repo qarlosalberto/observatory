@@ -47,7 +47,7 @@ export function parseBusLines(response){
 /** Only accept genuine operator line identifiers, not free-text stop names. */
 export function normalizeBusLine(value){
  const raw=String(value??'').trim().toUpperCase();
- if(!/^(?:\d{1,3}|N\d{1,2}|CI\d{1,2}|C\d{1,2}|TRA|ESP)$/.test(raw))return '';
+ if(!/^(?:[A-Z]{0,4}\d{1,3}|TRA|ESP)$/.test(raw))return '';
  return /^\d+$/.test(raw)?String(Number(raw)):raw;
 }
 
