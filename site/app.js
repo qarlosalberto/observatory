@@ -109,12 +109,54 @@ function availableBusLines(){
  for(const stop of state.stops)for(const line of busLinesOf(stop))lines.add(line);
  return [...lines].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
 }
+let busLineMenuIndex=0,busLineMenuAll=false;
+function matchingBusLines(){
+ const typed=busLineMenuAll?'':$('busLineFilter').value.trim().toUpperCase();
+ return availableBusLines().filter(line=>line.includes(typed));
+}
+function renderBusLineMatches(){
+ const menu=$('busLineMatches');
+ if(menu.hidden)return;
+ const lines=matchingBusLines();
+ busLineMenuIndex=Math.max(0,Math.min(busLineMenuIndex,lines.length-1));
+ const options=lines.map((line,i)=>{
+  const option=document.createElement('button');
+  option.type='button';option.id='busLineOption-'+line;option.setAttribute('role','option');
+  option.setAttribute('aria-selected',String(line===state.busLineFilter));
+  option.classList.toggle('active',i===busLineMenuIndex);
+  option.textContent=line;
+  option.addEventListener('click',()=>chooseBusLine(line));
+  return option;
+ });
+ if(!options.length){
+  const empty=document.createElement('p');empty.className='no-lines';empty.textContent='No matching bus lines';options.push(empty);
+ }
+ menu.replaceChildren(...options);
+ const active=lines[busLineMenuIndex];
+ if(active)$('busLineFilter').setAttribute('aria-activedescendant','busLineOption-'+active);
+ else $('busLineFilter').removeAttribute('aria-activedescendant');
+}
+function openBusLineMenu(showAll=false){
+ busLineMenuAll=showAll;busLineMenuIndex=0;
+ $('busLineMatches').hidden=false;
+ $('busLineFilter').setAttribute('aria-expanded','true');
+ $('busLineToggle').setAttribute('aria-expanded','true');
+ renderBusLineMatches();
+}
+function closeBusLineMenu(){
+ $('busLineMatches').hidden=true;
+ $('busLineFilter').setAttribute('aria-expanded','false');
+ $('busLineToggle').setAttribute('aria-expanded','false');
+ $('busLineFilter').removeAttribute('aria-activedescendant');
+}
+function chooseBusLine(line){
+ $('busLineFilter').value=line;
+ setBusLineFilter(line);
+ closeBusLineMenu();
+ $('busLineFilter').focus({preventScroll:true});
+}
 function updateBusLineSelector(){
- const lines=availableBusLines(),options=$('busLineOptions');
- options.replaceChildren(...lines.map(line=>{
-  const item=document.createElement('option');item.value=line;return item;
- }));
- const input=$('busLineFilter'),typed=input.value.trim(),status=$('busLineFilterStatus');
+ const lines=availableBusLines(),input=$('busLineFilter'),typed=input.value.trim(),status=$('busLineFilterStatus');
  if(typed&&!lines.includes(normalizeBusLine(typed))){
   status.textContent='Choose a line from the list to filter the map. No route filter is active.';
  }else if(state.busLineFilter){
@@ -123,6 +165,7 @@ function updateBusLineSelector(){
  }else{
   status.textContent='All bus stops shown. This filter changes the map only.';
  }
+ renderBusLineMatches();
 }
 function setBusLineFilter(text){
  const line=normalizeBusLine(text);
@@ -187,7 +230,7 @@ function busMarkers(){
 }
 async function loadBizi(force=false){if(!state.liveMode||!$('showBizi').checked)return;const epoch=state.liveEpoch;if(!force&&state.stations.length&&Date.now()-state.bikeFetched<60000){bikeMarkers();return}state.bikeError='';try{const feed=await getJson(BIZI_GBFS);const feeds=feed.data?.feeds||Object.values(feed.data||{}).find(x=>Array.isArray(x?.feeds))?.feeds||[];const info=feeds.find(x=>x.name==='station_information')?.url,status=feeds.find(x=>x.name==='station_status')?.url;if(!info||!status)throw Error('Missing GBFS feeds');const [i,s]=await Promise.all([getJson(info),getJson(status)]),statuses=new Map(asItems(s).map(a=>[String(a.station_id),a]));if(epoch!==state.liveEpoch||!state.liveMode)return;state.stations=asItems(i).map(x=>{const a=statuses.get(String(x.station_id))||{},n=a.num_vehicles_available??a.num_bikes_available,d=a.num_vehicles_disabled??a.num_bikes_disabled,k=a.num_docks_available;return {name:stationName(x.name,x.station_id),coords:coordsOf(x),available:n!=null&&Number.isFinite(+n)?+n:null,disabled:d!=null&&Number.isFinite(+d)?+d:null,docks:k!=null&&Number.isFinite(+k)?+k:null}}).filter(x=>x.coords);if(!state.stations.length)throw Error('No station coordinates');state.bikeSource='GBFS';}catch(err){try{const found=[];for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BIZI_FALLBACK}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const coords=coordsOf(st);if(!coords)continue;const n=st.bicisDisponibles,k=st.anclajesDisponibles;found.push({name:String(st.title??st.nombre??st.id),coords,available:n!=null&&Number.isFinite(+n)?+n:null,disabled:null,docks:k!=null&&Number.isFinite(+k)?+k:null})}if(batch.length<500)break}if(!found.length)throw Error('No municipal station data');if(epoch!==state.liveEpoch||!state.liveMode)return;state.stations=found;state.bikeSource='Municipal API (out-of-service status unknown)';}catch(e){if(epoch!==state.liveEpoch||!state.liveMode)return;state.bikeError=e.message;state.stations=[];state.bikeSource=''}}state.bikeFetched=Date.now();bikeMarkers();report()}
 async function loadStops(force=false){if(!state.liveMode||!$('showBus').checked)return;const epoch=state.liveEpoch;if(!force&&state.stops.length&&Date.now()-state.busFetched<3600000){busMarkers();void loadVisibleBusETAs();return}try{const out=[],seen=new Set();for(let start=0;start<4000;start+=500){const batch=asItems(await getJson(`${BUS_API}.json?rows=500&start=${start}&srsname=wgs84`));for(const st of batch){const id=stopId(st),coords=coordsOf(st);if(!id||!coords||seen.has(id))continue;seen.add(id);out.push({id,coords,name:String(st.title??st.nombre??st.name??id),arrivals:[],checked:0,apiResult:'pending'})}if(batch.length<500)break}if(!out.length)throw Error('No bus stops returned');if(epoch!==state.liveEpoch||!state.liveMode)return;state.stops=out;state.busFetched=Date.now();state.busError='';updateBusLineSelector();busMarkers();void loadVisibleBusETAs()}catch(e){if(epoch!==state.liveEpoch||!state.liveMode)return;state.busError=e.message;report()}}
-async function loadVisibleBusETAs(){if(!state.liveMode)return;const epoch=state.liveEpoch;if(state.busLoading){state.busReloadRequested=true;return}if(!state.map||!$('showBus').checked||state.map.getZoom()<12||!state.stops.length)return;state.busLoading=true;state.busReloadRequested=false;try{while($('showBus').checked&&state.map.getZoom()>=12){const now=Date.now(),bounds=state.map.getBounds().pad(.12),visible=state.stops.filter(x=>x.id.startsWith('tuzsa-')&&stopServesSelectedLine(x)&&bounds.contains(x.coords)),pending=visible.filter(x=>now-x.checked>60000);if(!pending.length)break;const batch=pending.slice(0,48);report();await Promise.all(Array.from({length:6},async(_,worker)=>{for(let i=worker;i<batch.length;i+=6){if(epoch!==state.liveEpoch||!state.liveMode)return;const st=batch[i];try{let result;for(let attempt=0;attempt<2;attempt++){try{try{result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}.json`)}catch(e){if(!/^HTTP (400|404)\b/.test(e.message))throw e;result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}`)}break}catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,350))}}st.arrivals=parseBusLines(result);st.apiResult=st.arrivals.some(a=>a.minutes!==null)?'known':'unknown';st.checked=Date.now()}catch{st.arrivals=[];st.apiResult='error';st.checked=Date.now()-30000}}}));if(epoch!==state.liveEpoch||!state.liveMode)return;busMarkers();report();if(pending.length>48)await new Promise(resolve=>setTimeout(resolve,350))}}finally{state.busLoading=false;report();if(state.busReloadRequested){state.busReloadRequested=false;void loadVisibleBusETAs()}}}
+async function loadVisibleBusETAs(){if(!state.liveMode)return;const epoch=state.liveEpoch;if(state.busLoading){state.busReloadRequested=true;return}if(!state.map||!$('showBus').checked||state.map.getZoom()<12||!state.stops.length)return;state.busLoading=true;state.busReloadRequested=false;try{while($('showBus').checked&&state.map.getZoom()>=12){const now=Date.now(),bounds=state.map.getBounds().pad(.12),visible=state.stops.filter(x=>x.id.startsWith('tuzsa-')&&stopServesSelectedLine(x)&&bounds.contains(x.coords)),pending=visible.filter(x=>now-x.checked>60000);if(!pending.length)break;const batch=pending.slice(0,48);report();await Promise.all(Array.from({length:6},async(_,worker)=>{for(let i=worker;i<batch.length;i+=6){if(epoch!==state.liveEpoch||!state.liveMode)return;const st=batch[i];try{let result;for(let attempt=0;attempt<2;attempt++){try{try{result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}.json`)}catch(e){if(!/^HTTP (400|404)\b/.test(e.message))throw e;result=await getJson(`${BUS_API}/${encodeURIComponent(st.id)}`)}break}catch(e){if(attempt)throw e;await new Promise(resolve=>setTimeout(resolve,350))}}st.arrivals=parseBusLines(result);st.apiResult=st.arrivals.some(a=>a.minutes!==null)?'known':'unknown';st.checked=Date.now()}catch{st.arrivals=[];st.apiResult='error';st.checked=Date.now()-30000}}}));if(epoch!==state.liveEpoch||!state.liveMode)return;updateBusLineSelector();busMarkers();report();if(pending.length>48)await new Promise(resolve=>setTimeout(resolve,350))}}finally{state.busLoading=false;report();if(state.busReloadRequested){state.busReloadRequested=false;void loadVisibleBusETAs()}}}
 function refresh(force=false){
  if(!state.liveMode){
   if(force)void loadLatestSnapshot(true);
@@ -588,9 +631,32 @@ for(const button of document.querySelectorAll('[data-view]')){
 }
 $('aboutToggle').addEventListener('click',()=>{const intro=$('siteIntro'),open=intro.hidden;intro.hidden=!open;$('aboutToggle').setAttribute('aria-expanded',String(open));$('aboutToggle').setAttribute('aria-label',open?'Hide Observatory information':'More information about Observatory')});
 $('openIncidents').addEventListener('click',()=>selectView('incidents'));
-$('busLineFilter').addEventListener('input',e=>setBusLineFilter(e.target.value));
+$('busLineFilter').addEventListener('focus',()=>openBusLineMenu());
+$('busLineFilter').addEventListener('input',e=>{busLineMenuAll=false;busLineMenuIndex=0;setBusLineFilter(e.target.value);openBusLineMenu()});
 $('busLineFilter').addEventListener('change',e=>setBusLineFilter(e.target.value));
-$('clearBusLineFilter').addEventListener('click',()=>{$('busLineFilter').value='';setBusLineFilter('')});
+$('busLineFilter').addEventListener('keydown',e=>{
+ if(e.key==='Escape'){if(!$('busLineMatches').hidden){e.preventDefault();closeBusLineMenu()}return}
+ if(e.key==='Tab'){closeBusLineMenu();return}
+ if(e.key==='ArrowDown'||e.key==='ArrowUp'){
+  e.preventDefault();
+  if($('busLineMatches').hidden){openBusLineMenu();return}
+  const lines=matchingBusLines();
+  if(!lines.length)return;
+  busLineMenuIndex=(busLineMenuIndex+(e.key==='ArrowDown'?1:-1)+lines.length)%lines.length;
+  renderBusLineMatches();
+  document.getElementById('busLineOption-'+lines[busLineMenuIndex])?.scrollIntoView({block:'nearest'});
+ }else if(e.key==='Enter'&&!$('busLineMatches').hidden){
+  e.preventDefault();
+  const selected=matchingBusLines()[busLineMenuIndex];
+  if(selected)chooseBusLine(selected);
+ }
+});
+$('busLineToggle').addEventListener('click',()=>{
+ if(!$('busLineMatches').hidden){closeBusLineMenu();return}
+ $('busLineFilter').focus({preventScroll:true});openBusLineMenu(true);
+});
+$('clearBusLineFilter').addEventListener('click',()=>{$('busLineFilter').value='';setBusLineFilter('');closeBusLineMenu()});
+document.addEventListener('pointerdown',e=>{if(!e.target.closest('.bus-line-filter'))closeBusLineMenu()});
 $('refresh').addEventListener('click',()=>refresh(true));
 $('showBizi').addEventListener('change',()=>refresh(false));
 $('showBus').addEventListener('change',()=>refresh(false));
