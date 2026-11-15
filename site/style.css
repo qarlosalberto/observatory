@@ -75,7 +75,7 @@ main{max-width:1320px;margin:auto;padding:26px 28px 64px}
 .bus-line-matches{position:absolute;z-index:1000;top:calc(100% + 4px);left:0;right:0;max-height:min(270px,45vh);overflow-y:auto;overscroll-behavior:contain;border:1px solid #b6cada;border-radius:11px;background:#fff;box-shadow:0 12px 30px rgba(13,37,64,.20);padding:5px}
 .bus-line-matches[hidden]{display:none}
 .bus-line-matches button{display:block;width:100%;min-height:36px;text-align:left;border:0;border-radius:7px;background:transparent;color:#193750;padding:8px 12px;cursor:pointer;font:inherit}
-.bus-line-matches button:hover,.bus-line-matches button:focus-visible,.bus-line-matches button[aria-selected="true"]{background:#e8f0fa}
+.bus-line-matches button:hover,.bus-line-matches button:focus-visible,.bus-line-matches button.active,.bus-line-matches button[aria-selected="true"]{background:#e8f0fa}
 .bus-line-matches .no-lines{padding:10px;color:#53677b;font-size:12px}
 .bus-line-filter .fineprint{margin:7px 0 0;font-size:11px}
 @media(max-width:370px){.bus-line-filter{padding:11px}.bus-line-filter-controls{flex-wrap:wrap}.bus-line-filter-controls>button{width:100%}}
