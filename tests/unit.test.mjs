@@ -92,7 +92,7 @@ test('legacy timeline labels are repaired without changing observed measurements
  assert.equal(repaired[0].at,frames[0].at);
 });
 
-import {selectBusSample,nextBusSampleOffset} from '../scripts/bus-sampling.mjs';
+
 import {parseAvanzaArrivals,fetchAvanzaArrivals,AVANZA_URL,AVANZA_TIMEOUT_MS} from '../scripts/avanza-arrivals.mjs';
 test('Avanza arrivals are retained only when vehicle identifiers agree',()=>{
  const body='<li><a href="#"><strong>039<i></i>VADORREY</strong></a><ul><li><a href="https://gps.avanzabus.com/zaragoza/fParadas/744/9001"><i></i>9001 [3 mins]</a></li></ul></li>';
@@ -114,7 +114,7 @@ test('Avanza transport uses the published stop POST parameters',async()=>{
  assert.equal(new URLSearchParams(call.options.body).get('coche'),'0');
 });
 
-import {BUS_SAMPLE_LIMIT,HISTORY_BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from '../scripts/bus-sampling.mjs';
+import {BUS_SAMPLE_LIMIT,HISTORY_BUS_SAMPLE_LIMIT,selectBusSample,nextBusSampleOffset,serializeBusArrivals} from '../scripts/bus-sampling.mjs';
 test('operator observations retain every vehicle for the same route and validate duplicates',()=>{
  const body='<li><strong>039<i></i>VADORREY</strong><ul><li><a href="/zaragoza/fParadas/744/9001">9001 [3 mins]</a></li><li><a href="/zaragoza/fParadas/744/9002">9002 [11 mins]</a></li></ul></li>';
  const markers={'0':{icon:'/img/bus.png',title:'039 9001'},'1':{icon:'/img/bus.png',title:'039 9002'}};
