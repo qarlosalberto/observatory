@@ -425,6 +425,8 @@ test('searchable line selector lists catalogue routes and filters bus pins and s
  await page.reload();
  await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(6);
+ const pinColors=()=>page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
+ expect((await pinColors())['tuzsa-798']).toBe('#871a2c'); // Unfiltered: line 24 has a 38-minute gap.
  await page.locator('#busLineToggle').click();
  await expect(page.locator('#busLineMatches')).toBeVisible();
  const allOptions=await page.locator('#busLineMatches [role="option"]').allTextContents();
@@ -432,9 +434,6 @@ test('searchable line selector lists catalogue routes and filters bus pins and s
  await page.locator('#busLineMatches [role="option"]').filter({hasText:'23'}).click();
  await expect(page.locator('#busLineMatches')).toBeHidden();
  await expect(page.locator('#busLineFilter')).toHaveValue('23');
- const pinColors=()=>page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
- expect((await pinColors())['tuzsa-798']).toBe('#871a2c'); // Unfiltered: line 24 has a 38-minute gap.
- await page.locator('#busLineFilter').fill('23');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busLineFilter)).toBe('23');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(4);
  const line23=await pinColors();
