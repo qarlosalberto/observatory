@@ -80,6 +80,7 @@ function report(){
  chart('busChart','bar',['0–5 min','6–15 min','16–18 min','>18 min'],[b.quick,b.medium,b.redWaits,b.darkRedWaits],[color.green,color.blue,color.red,color.darkRed]);
 }
 function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels:labels.map(x=>translateText(x)),datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
+function busIntervalClass(minutes){return minutes>18?'severe':minutes>BUS_GAP_THRESHOLD?'over':minutes<=5?'wait-good':'wait-ok'}
 function popup(title,details){const div=document.createElement('div'),strong=document.createElement('strong');strong.textContent=title;div.append(strong);for(const [line,cls] of details){const p=document.createElement('div');p.className='popup-line'+(cls?' '+cls:'');p.textContent=line;div.append(p)}return div}
 function bikeMarkers(){
  state.bl.clearLayers();
@@ -202,12 +203,19 @@ function busMarkers(){
     ...regularity.routes.flatMap(route=>{
      const label='Route '+route.line+(route.destination?' → '+route.destination:'');
      return [
-      ...(route.slowFirst?[[label+': first predicted bus in '+route.first+' min','over']]:[]),
-      ...route.gaps.map(g=>[label+': '+g.from+' → '+g.to+' min · '+g.minutes+' min between buses',g.minutes>BUS_GAP_THRESHOLD?'over':''])
+      ...(route.slowFirst?[[label+': first predicted bus in '+route.first+' min',busIntervalClass(route.first)]]:[]),
+      ...route.gaps.map(g=>[label+': '+g.from+' → '+g.to+' min · '+g.minutes+' min between buses',busIntervalClass(g.minutes)])
      ];
     }),
     ...(regularity.hasArrivals&&!regularity.comparedGaps?[['No consecutive buses for the same route and destination to compare','unknown']]:[]),
-    ...(valid.length?arrivals.map(a=>['Route '+a.line+(a.destination?' → '+a.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'')+': '+(a.minutes===null?'no prediction':a.minutes+' min'),a.minutes===null?'unknown':a.minutes>15?'over':'']):[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
+    ...(valid.length?[
+     ...regularity.routes.flatMap(route=>route.observations.map(entry=>{
+      const a=entry.arrival;
+      const name='Route '+route.line+(route.destination?' → '+route.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'');
+      return [name+': '+entry.minutes+' min'+(entry.first?'':' · '+entry.interval+' min since previous bus'),busIntervalClass(entry.interval)];
+     })),
+     ...arrivals.filter(a=>!a||!Number.isFinite(a.minutes)||a.minutes<0||a.minutes>180).map(a=>['Route '+String(a?.line??'?')+(a?.destination?' → '+a.destination:'')+': no prediction','unknown'])
+    ]:[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
    ];
    const signature=JSON.stringify([shape,details,stop.name]);
    let marker=state.markers.get(stop.id);
