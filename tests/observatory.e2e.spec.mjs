@@ -388,6 +388,34 @@ test('visible coloured bus pin owns its popup without an invisible overlapping h
  expect(pin.text).toContain('4 min');
 });
 
+test('5, 20 and 23 minute ETAs show exactly 15 and 3 minute gaps and only those colour the stop',async({page})=>{
+ await setup(page);
+ const arrivals=[
+  {line:'35',destination:'PARQUE GOYA',minutes:23,vehicle:'9003'},
+  {line:'35',destination:'PARQUE GOYA',minutes:5,vehicle:'9001'},
+  {line:'35',destination:'PARQUE GOYA',minutes:20,vehicle:'9002'},
+  {line:'24',destination:'SUR',minutes:70,vehicle:'2001'}
+ ];
+ const first={...stop(798,5),name:'(78) Av. Cataluña Líneas: 35, 24',arrivals};
+ const bus={...latest.bus,sampled:1,stops:[first],catalog:[{id:first.id,coords:first.coords,name:first.name}]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('35');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#d94749');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ const popup=page.locator('.leaflet-popup-content');
+ await expect(popup).toContainText('5 → 20 min · 15 min between buses');
+ await expect(popup).toContainText('20 → 23 min · 3 min between buses');
+ await expect(popup).not.toContainText('Route 24');
+ await expect(popup.locator('.popup-line').filter({hasText:'vehicle 9001'})).toHaveClass(/unknown/);
+ await expect(popup.locator('.popup-line').filter({hasText:'vehicle 9002'})).toHaveClass(/over/);
+ await expect(popup.locator('.popup-line').filter({hasText:'vehicle 9003'})).toHaveClass(/wait-good/);
+ const histogram=await page.evaluate(()=>window.__observatoryTest.state.charts.busChart.data.datasets[0].data);
+ expect(histogram).toEqual([1,0,1,0]);
+ await expect(page.locator('#busKpis .kpi').filter({hasText:'Consecutive bus intervals'}).locator('strong')).toHaveText('2');
+});
+
 test('red marks predicted gaps of 15 minutes or more even when the first bus arrives soon',async({page})=>{
  await setup(page);
  const withArrivals={...latest,bus:{...latest.bus,sampled:5,stops:[
