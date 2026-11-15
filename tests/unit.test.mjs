@@ -483,6 +483,10 @@ import {readFileSync} from 'node:fs';
 
 
 test('specific route statuses and nested map-coverage labels are fully translated into Spanish',()=>{
+ assert.equal(translateText('Stops with waits or gaps ≥15 min','es-ES'),'Paradas con esperas o intervalos de 15 min o más');
+ assert.equal(translateText('Zoom in','es-ES'),'Acercar');
+ assert.equal(translateText('Zoom out','es-ES'),'Alejar');
+ assert.equal(translateText('Published bus route geometry: Ayuntamiento de Zaragoza · IDEZar','es-ES'),'Trazado oficial de autobuses: Ayuntamiento de Zaragoza · IDEZar');
  assert.equal(translateText('1/1 stations reporting','es-ES'),'1/1 estaciones con datos');
  assert.equal(translateText('Line 35: loading published route…','es-ES'),'Línea 35: cargando el recorrido publicado…');
  assert.equal(translateText('Line 35: published itinerary · 2 segments. Connections between stops may be schematic.','es-ES'),
