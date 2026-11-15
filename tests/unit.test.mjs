@@ -261,13 +261,13 @@ test('bus stop turns red for 37-minute interval even with a first bus in three m
  assert.deepEqual(value.routes[0].gaps,[{from:3,to:40,minutes:37},{from:40,to:55,minutes:15}]);
 });
 
-test('regularity detection includes initial waits and gaps of exactly 15 minutes',()=>{
+test('regularity colours use comparable gaps, not a lone first-bus wait',()=>{
  const boundary=analyzeBusRegularity([{line:'21',minutes:2},{line:'21',minutes:17}]);
  assert.equal(boundary.red,true);
  assert.equal(boundary.longGap,true);
  assert.equal(analyzeBusRegularity([{line:'21',minutes:2},{line:'21',minutes:18}]).red,true);
  const lone=analyzeBusRegularity([{line:'21',minutes:16}]);
- assert.equal(lone.red,true);
+ assert.equal(lone.red,false);
  assert.equal(lone.slowFirst,true);
  assert.equal(lone.longGap,false);
  assert.equal(lone.comparedGaps,0);
@@ -300,21 +300,23 @@ test('bus aggregates include red stops and stops with actual measured headways',
   {checked:0,arrivals:[],apiResult:'unsampled'}
  ];
  const stats=summarizeBuses(stops);
- assert.equal(stats.redStops,2);
+ assert.equal(stats.redStops,1);
  assert.equal(stats.longGapStops,1);
+ assert.equal(stats.comparableStops,2);
  assert.equal(stats.comparedGaps,2);
+ assert.deepEqual(stats.intervals,{total:2,short:0,medium:1,red:0,darkRed:1});
  assert.equal(stats.withETA,3);
 });
 
-test('dark red bus wait or headway is strictly greater than 18 minutes',()=>{
+test('dark red represents strictly >18-minute headways, never lone waits',()=>{
  assert.equal(BUS_DARK_RED_WAIT_THRESHOLD,18);
  for(const minutes of [3,15,16,18]){
   const a=analyzeBusRegularity([{line:'23',minutes}]);
   assert.equal(a.darkRed,false,minutes+' min must not be dark red');
  }
  const late=analyzeBusRegularity([{line:'23',minutes:19}]);
- assert.equal(late.darkRed,true);
- assert.equal(late.red,true);
+ assert.equal(late.darkRed,false);
+ assert.equal(late.red,false);
  const gapOnly=analyzeBusRegularity([{line:'23',minutes:3},{line:'23',minutes:40}]);
  assert.equal(gapOnly.darkRed,true,'37-minute gap is dark red despite the first bus arriving soon');
  assert.equal(gapOnly.red,true);
@@ -322,7 +324,7 @@ test('dark red bus wait or headway is strictly greater than 18 minutes',()=>{
  assert.equal(gapAtThreshold.darkRed,false,'an exact 18-minute gap stays standard red');
  assert.equal(gapAtThreshold.red,true);
  const mixed=analyzeBusRegularity([{line:'23',minutes:3},{line:'24',minutes:21}]);
- assert.equal(mixed.darkRed,true,'one route with first wait >18 min is sufficient');
+ assert.equal(mixed.darkRed,false,'different lines with one ETA each are not comparable');
  assert.equal(analyzeBusRegularity([{line:'23',minutes:null}]).darkRed,false);
 });
 
@@ -337,6 +339,7 @@ test('predicted waiting-time histogram has exclusive red and dark-red buckets',(
  assert.equal(stats.long,5,'current ETA severity includes the exact 15-minute boundary');
  assert.equal(stats.withETA,1);
  assert.equal(stats.quick+stats.medium+stats.redWaits+stats.darkRedWaits,stats.estimates);
+ assert.deepEqual(stats.intervals,{total:7,short:5,medium:2,red:0,darkRed:0},'first ETA is not an inter-bus interval');
  const onlyBoundary=summarizeBuses([{arrivals:[{line:'23',minutes:18}],checked:1,apiResult:'known'}]);
  assert.equal(onlyBoundary.redWaits,1);
  assert.equal(onlyBoundary.darkRedWaits,0,'exactly 18 min is standard red');
@@ -392,15 +395,15 @@ test('individual popup headways compare each vehicle to the prior bus on the SAM
  const routes=analyzeBusRegularity(arr).routes;
  const goya=routes.find(x=>x.line==='35'&&x.destination==='PARQUE GOYA');
  assert.deepEqual(goya.observations.map(({minutes,first,interval})=>({minutes,first,interval})),[
-  {minutes:6,first:true,interval:6},
+  {minutes:6,first:true,interval:null},
   {minutes:21,first:false,interval:15}
  ]);
  assert.deepEqual(goya.gaps,[{from:6,to:21,minutes:15}]);
  assert.equal(goya.observations[1].arrival.vehicle,'4882');
- assert.deepEqual(routes.find(x=>x.line==='35'&&x.destination==='OTRO DESTINO').observations.map(x=>x.interval),[25]);
- assert.deepEqual(routes.find(x=>x.line==='28').observations.map(x=>x.interval),[40]);
+ assert.deepEqual(routes.find(x=>x.line==='35'&&x.destination==='OTRO DESTINO').observations.map(x=>x.interval),[null]);
+ assert.deepEqual(routes.find(x=>x.line==='28').observations.map(x=>x.interval),[null]);
  const severity=analyzeBusRegularity([{line:'23',minutes:3},{line:'23',minutes:19},{line:'23',minutes:40}]).routes[0].observations;
- assert.deepEqual(severity.map(x=>x.interval),[3,16,21]);
+ assert.deepEqual(severity.map(x=>x.interval),[null,16,21]);
 });
 
 test('stop 78 line 35 at 6 and 21 minutes is red because the gap is exactly 15',()=>{
@@ -511,4 +514,28 @@ test('static page copy and accessibility labels have Spanish translations, excep
   .filter(s=>/[A-Za-z]{3,}/.test(s)&&!/^(?:observatory\.?|Bizi|Zaragoza)$/i.test(s));
  const missing=[...new Set(values.filter(s=>translateText(s,'es-ES')===s))];
  assert.deepEqual(missing,[],'Every authored visible label or accessibility string needs a translation');
+});
+
+test('5, 20 and 23-minute arrivals produce 15 and 3-minute consecutive headways, not absolute waits',()=>{
+ const arrivals=[
+  {line:'35',destination:'PARQUE GOYA',minutes:23,vehicle:'9003'},
+  {line:'35',destination:'PARQUE GOYA',minutes:5,vehicle:'9001'},
+  {line:'35',destination:'PARQUE GOYA',minutes:20,vehicle:'9002'},
+  {line:'35',destination:'PARQUE GOYA',minutes:20,vehicle:'9002'}, // Same bus must not be counted twice.
+  {line:'35',destination:'OTRO DESTINO',minutes:80,vehicle:'9999'},
+  {line:'23',destination:'PARQUE GOYA',minutes:60,vehicle:'8888'}
+ ];
+ const result=analyzeBusRegularity(arrivals),service=result.routes.find(r=>r.line==='35'&&r.destination==='PARQUE GOYA');
+ assert.equal(service.first,5);
+ assert.deepEqual(service.gaps,[{from:5,to:20,minutes:15},{from:20,to:23,minutes:3}]);
+ assert.deepEqual(service.observations.map(o=>o.interval),[null,15,3]);
+ assert.equal(result.comparedGaps,2);
+ assert.equal(result.red,true);
+ assert.equal(result.darkRed,false);
+ const stats=summarizeBuses([{arrivals,checked:1,apiResult:'known'}]);
+ assert.deepEqual(stats.intervals,{total:2,short:1,medium:0,red:1,darkRed:0});
+ assert.equal(stats.comparableStops,1);
+ assert.equal(stats.redStops,1);
+ assert.equal(analyzeBusRegularity([{line:'35',minutes:50}]).red,false);
+ assert.equal(analyzeBusRegularity([{line:'35',minutes:50}]).darkRed,false);
 });
