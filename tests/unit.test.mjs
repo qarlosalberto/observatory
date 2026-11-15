@@ -480,7 +480,7 @@ test('interleaved partial samples resume at next actually unqueried stop',()=>{
 });
 
 import {readFileSync} from 'node:fs';
-import {translateText} from '../site/i18n.js';
+
 
 test('specific route statuses and nested map-coverage labels are fully translated into Spanish',()=>{
  assert.equal(translateText('Line 35: loading published route…','es-ES'),'Línea 35: cargando el recorrido publicado…');
