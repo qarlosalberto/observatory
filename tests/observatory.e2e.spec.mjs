@@ -544,3 +544,25 @@ test('searchable bus-line dropdown includes special EM3 service and supports Ent
  await expect(input).toHaveValue('');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
 });
+
+test('line 35 arrivals at 6 and 21 minutes stay blue because their headway is exactly 15',async({page})=>{
+ await setup(page);
+ const one={...stop(798,6),name:'(78) Av. De Cataluña / Balcón De San Lázaro Líneas: 35, N1, 28, 39, N7, 50, Ci4',
+  arrivals:[
+   {line:'35',destination:'PARQUE GOYA',minutes:6,vehicle:'4328'},
+   {line:'35',destination:'PARQUE GOYA',minutes:21,vehicle:'4882'},
+   {line:'28',destination:'CENTRO',minutes:40,vehicle:'9001'}
+  ]};
+ const bus={...latest.bus,stops:[one],catalog:[{id:one.id,name:one.name,coords:one.coords}]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('35');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
+ await expect(page.locator('.leaflet-popup-content')).not.toContainText('Route 28');
+ await expect(page.locator('.bus-legend').filter({hasText:'no wait/gap over 15 min detected'})).toHaveCount(1);
+ await page.locator('#busLineFilter').fill('28');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c');
+});
