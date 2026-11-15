@@ -287,7 +287,7 @@ test.describe('Spanish (Spain) browser localization',()=>{
   expect(red).toBe('#871a2c');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
   await expect(page.locator('.leaflet-popup-content')).toContainText('intervalo de 37 min');
-  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 y ≤18 min'})).toHaveCount(1);
+  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo ≥15 y ≤18 min'})).toHaveCount(1);
  });
 });
 test.describe('non-Spanish locale falls back to English',()=>{
@@ -317,7 +317,7 @@ test('visible coloured bus pin owns its popup without an invisible overlapping h
  expect(pin.text).toContain('4 min');
 });
 
-test('red marks predicted gaps above 15 minutes even when the first bus arrives soon',async({page})=>{
+test('red marks predicted gaps of 15 minutes or more even when the first bus arrives soon',async({page})=>{
  await setup(page);
  const withArrivals={...latest,bus:{...latest.bus,sampled:5,stops:[
   {...stop(798,3),arrivals:[
@@ -336,14 +336,14 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(5);
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
  expect(pins['tuzsa-798']).toBe('#871a2c');
- expect(pins['tuzsa-799']).toBe('#4274c7'); // 15-minute interval is allowed
+ expect(pins['tuzsa-799']).toBe('#d94749'); // Exactly 15 minutes is a red interval
  expect(pins['tuzsa-800']).toBe('#d94749'); // 16 minutes to the first bus
  expect(pins['tuzsa-801']).toBe('#4274c7'); // two different lines are not consecutive
  expect(pins['tuzsa-802']).toBe('#89929f');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  await expect(page.locator('.leaflet-popup-content')).toContainText('37 min between buses');
  await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
- await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps >15 min');
+ await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps ≥15 min');
 });
 
 
@@ -568,7 +568,7 @@ test('line 35 arrivals at 6 and 21 minutes stay blue because their headway is ex
  await expect(second).toContainText('21 min · 15 min since previous bus');
  await expect(second).not.toHaveClass(/over|severe/);
  await expect(page.locator('.leaflet-popup-content')).not.toContainText('Route 28');
- await expect(page.locator('.bus-legend').filter({hasText:'no wait/gap over 15 min detected'})).toHaveCount(1);
+ await expect(page.locator('.bus-legend').filter({hasText:'no wait/gap ≥15 min detected'})).toHaveCount(1);
  await page.locator('#busLineFilter').fill('28');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c');
 });
@@ -616,4 +616,18 @@ test.describe('Spanish popup headway colour semantics',()=>{
   await expect(second).toContainText('21 min · intervalo de 15 min respecto al anterior');
   await expect(second).toHaveClass(/wait-ok/);
  });
+});
+
+test('stop 78 Avanza line 35 with 6 and 21 minutes renders standard red',async({page})=>{
+ await setup(page);
+ const arrivals=[{line:'35',destination:'PARQUE GOYA',minutes:6,vehicle:'4328'},{line:'35',destination:'PARQUE GOYA',minutes:21,vehicle:'4882'}];
+ const bus={...latest.bus,stops:[{...stop(798,6),name:'(78) Av. De Cataluña / Balcón De San Lázaro Líneas: 35, N1, 28, 39, N7, 50, Ci4',arrivals}]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#d94749');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
+ await page.locator('#busLineFilter').fill('35');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#d94749');
 });
