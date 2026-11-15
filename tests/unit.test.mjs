@@ -109,7 +109,7 @@ test('Avanza transport uses the published stop POST parameters',async()=>{
  assert.deepEqual(rows,[]);
  assert.equal(call.url,AVANZA_URL);
  assert.equal(call.options.method,'POST');
- assert.equal(AVANZA_TIMEOUT_MS,10000);
+ assert.equal(AVANZA_TIMEOUT_MS,18000);
  assert.equal(new URLSearchParams(call.options.body).get('poste'),'744');
  assert.equal(new URLSearchParams(call.options.body).get('coche'),'0');
 });
