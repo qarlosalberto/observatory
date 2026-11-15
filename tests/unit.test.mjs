@@ -305,7 +305,7 @@ test('bus aggregates include red stops and stops with actual measured headways',
  assert.equal(stats.withETA,3);
 });
 
-test('dark red bus wait is strictly greater than 18 minutes, independent of headway',()=>{
+test('dark red bus wait or headway is strictly greater than 18 minutes',()=>{
  assert.equal(BUS_DARK_RED_WAIT_THRESHOLD,18);
  for(const minutes of [3,15,16,18]){
   const a=analyzeBusRegularity([{line:'23',minutes}]);
@@ -315,8 +315,11 @@ test('dark red bus wait is strictly greater than 18 minutes, independent of head
  assert.equal(late.darkRed,true);
  assert.equal(late.red,true);
  const gapOnly=analyzeBusRegularity([{line:'23',minutes:3},{line:'23',minutes:40}]);
- assert.equal(gapOnly.darkRed,false,'37-minute gap without a long first wait stays standard red');
+ assert.equal(gapOnly.darkRed,true,'37-minute gap is dark red despite the first bus arriving soon');
  assert.equal(gapOnly.red,true);
+ const gapAtThreshold=analyzeBusRegularity([{line:'23',minutes:3},{line:'23',minutes:21}]);
+ assert.equal(gapAtThreshold.darkRed,false,'an exact 18-minute gap stays standard red');
+ assert.equal(gapAtThreshold.red,true);
  const mixed=analyzeBusRegularity([{line:'23',minutes:3},{line:'24',minutes:21}]);
  assert.equal(mixed.darkRed,true,'one route with first wait >18 min is sufficient');
  assert.equal(analyzeBusRegularity([{line:'23',minutes:null}]).darkRed,false);
