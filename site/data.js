@@ -47,7 +47,7 @@ export function parseBusLines(response){
 /** Only accept genuine operator line identifiers, not free-text stop names. */
 export function normalizeBusLine(value){
  const raw=String(value??'').trim().toUpperCase();
- if(!/^(?:\d{1,3}|N\d{1,2}|CI\d{1,2}|C\d{1,2}|TRA|ESP)$/.test(raw))return '';
+ if(!/^(?:[A-Z]{0,4}\d{1,3}|TRA|ESP)$/.test(raw))return '';
  return /^\d+$/.test(raw)?String(Number(raw)):raw;
 }
 
@@ -88,6 +88,7 @@ export const BUS_DARK_RED_WAIT_THRESHOLD=18;
  * Compare successive predictions only within the same route and destination.
  * ETAs are minutes from one observation, not proof of published headways or punctuality.
  * A single predicted bus cannot establish the interval to an unreported next bus.
+ * Distinct observations expose their first wait or preceding same-service gap for popup colouring.
  */
 export function analyzeBusRegularity(arrivals=[]){
  const byService=new Map();
@@ -102,19 +103,23 @@ export function analyzeBusRegularity(arrivals=[]){
   if(vehicle&&service.vehicles.has(vehicle)){
    // Two observations of the same physical vehicle do not form an interval.
    const existing=service.vehicles.get(vehicle);
-   existing.minutes=Math.min(existing.minutes,a.minutes);
+   if(a.minutes<existing.minutes){existing.minutes=a.minutes;existing.arrival=a}
   }else{
-   const entry={minutes:a.minutes};
+   const entry={minutes:a.minutes,arrival:a};
    service.entries.push(entry);
    if(vehicle)service.vehicles.set(vehicle,entry);
   }
  }
  const routes=[...byService.values()].map(({line,destination,entries})=>{
-  const times=entries.map(a=>a.minutes).sort((a,b)=>a-b);
-  const gaps=[];
+  const sorted=entries.slice().sort((a,b)=>a.minutes-b.minutes);
+  const times=sorted.map(a=>a.minutes),gaps=[];
   for(let i=1;i<times.length;i++)gaps.push({from:times[i-1],to:times[i],minutes:times[i]-times[i-1]});
+  const observations=sorted.map((entry,i)=>({
+   arrival:entry.arrival,minutes:entry.minutes,
+   first:i===0,interval:i===0?entry.minutes:entry.minutes-times[i-1]
+  }));
   const first=times[0];
-  return {line,destination,first,gaps,slowFirst:first>BUS_GAP_THRESHOLD,longGap:gaps.some(x=>x.minutes>BUS_GAP_THRESHOLD)};
+  return {line,destination,first,gaps,observations,slowFirst:first>=BUS_GAP_THRESHOLD,longGap:gaps.some(x=>x.minutes>=BUS_GAP_THRESHOLD)};
  }).sort((a,b)=>a.line.localeCompare(b.line,undefined,{numeric:true})||a.destination.localeCompare(b.destination));
  return {
   routes,
@@ -130,10 +135,10 @@ export function analyzeBusRegularity(arrivals=[]){
 export function summarizeBuses(stops){
  const validETA=a=>Number.isFinite(a?.minutes)&&a.minutes>=0&&a.minutes<=180;
  const estimates=stops.flatMap(s=>s.arrivals||[]).filter(validETA);
- const redWaits=estimates.filter(x=>x.minutes>BUS_GAP_THRESHOLD&&x.minutes<=BUS_DARK_RED_WAIT_THRESHOLD).length;
+ const redWaits=estimates.filter(x=>x.minutes>=BUS_GAP_THRESHOLD&&x.minutes<=BUS_DARK_RED_WAIT_THRESHOLD).length;
  const darkRedWaits=estimates.filter(x=>x.minutes>BUS_DARK_RED_WAIT_THRESHOLD).length;
  const observed=stops.map(s=>analyzeBusRegularity(s.arrivals));
- return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<=BUS_GAP_THRESHOLD).length,redWaits,darkRedWaits,long:redWaits+darkRedWaits,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(validETA)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:observed.reduce((n,x)=>n+x.comparedGaps,0)};
+ return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<BUS_GAP_THRESHOLD).length,redWaits,darkRedWaits,long:redWaits+darkRedWaits,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(validETA)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:observed.reduce((n,x)=>n+x.comparedGaps,0)};
 }
 
 /** Convert WGS84 or municipal UTM zone 30N coordinates to Leaflet coordinates. */
