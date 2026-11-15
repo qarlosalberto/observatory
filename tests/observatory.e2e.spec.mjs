@@ -401,3 +401,102 @@ test.describe('Spanish bus-wait chart categories',()=>{
   await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.busChart?.data.labels)).toEqual(['0–5 min','6–15 min','16–18 min','>18 min']);
  });
 });
+
+test('searchable line selector lists catalogue routes and filters bus pins and severity',async({page})=>{
+ await setup(page);
+ const stops=[
+  {...stop(798,3),name:'(798) Avenida Líneas: 23, 24',arrivals:[
+   {line:'23',minutes:3,destination:'CENTRO',vehicle:'1001'},
+   {line:'23',minutes:9,destination:'CENTRO',vehicle:'1002'},
+   {line:'24',minutes:2,destination:'SUR',vehicle:'2001'},
+   {line:'24',minutes:40,destination:'SUR',vehicle:'2002'}
+  ]},
+  {...stop(799,null),name:'(799) Plaza Líneas: 23',status:'unknown',arrivals:[]},
+  {...stop(800,17),name:'(800) Barrio Líneas: 24',arrivals:[{line:'24',minutes:17}]},
+  {...stop(801,19),name:'(801) Calle Líneas: 23',arrivals:[{line:'23',minutes:19}]}
+ ];
+ const catalog=[
+  ...stops.map(s=>({id:s.id,coords:s.coords,name:s.name})),
+  {id:'tuzsa-802',coords:stop(802,0).coords,name:'(802) Night Líneas: N3'},
+  {id:'tuzsa-803',coords:stop(803,0).coords,name:'(803) No prediction Líneas: 23, 31'}
+ ];
+ const bus={...latest.bus,population:6,sampled:4,stops,catalog};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(6);
+ const allOptions=await page.locator('#busLineOptions option').evaluateAll(items=>items.map(x=>x.value));
+ expect(allOptions).toEqual(['23','24','31','N3']);
+ const pinColors=()=>page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
+ expect((await pinColors())['tuzsa-798']).toBe('#871a2c'); // Unfiltered: line 24 has a 38-minute gap.
+ await page.locator('#busLineFilter').fill('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busLineFilter)).toBe('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(4);
+ const line23=await pinColors();
+ expect(Object.keys(line23).sort()).toEqual(['tuzsa-798','tuzsa-799','tuzsa-801','tuzsa-803']);
+ expect(line23['tuzsa-798']).toBe('#4274c7'); // Same stop is blue when only line 23 counts.
+ expect(line23['tuzsa-799']).toBe('#89929f'); // A known route stop without an ETA stays visible.
+ expect(line23['tuzsa-801']).toBe('#871a2c');
+ expect(line23['tuzsa-803']).toBe('#89929f'); // Unsampled catalogue stop with a published route.
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ const popup=page.locator('.leaflet-popup-content');
+ await expect(popup).toContainText('Route 23');
+ await expect(popup).not.toContainText('Route 24');
+ await expect(page.locator('#busLineFilterStatus')).toContainText('4 known stops for line 23');
+ await page.locator('#busLineFilter').fill('24');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
+ const line24=await pinColors();
+ expect(line24['tuzsa-798']).toBe('#871a2c');
+ expect(line24['tuzsa-800']).toBe('#d94749');
+ await page.locator('#busLineFilter').fill('N3');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
+ expect((await pinColors())['tuzsa-802']).toBe('#89929f');
+ await page.locator('#clearBusLineFilter').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(6);
+ expect(await page.locator('#busLineFilter').inputValue()).toBe('');
+});
+
+test('bus line filter persists across historical frames and other service tabs',async({page})=>{
+ await setup(page);
+ const bus={...latest.bus,stops:[
+  {...stop(798,3),name:'(798) Avenida Líneas: 23, 24',arrivals:[{line:'23',minutes:3},{line:'24',minutes:40}]},
+  {...stop(799,null),name:'(799) Plaza Líneas: 23',arrivals:[]}
+ ],catalog:[
+  {id:'tuzsa-798',coords:stop(798,0).coords,name:'(798) Avenida Líneas: 23, 24'},
+  {id:'tuzsa-799',coords:stop(799,0).coords,name:'(799) Plaza Líneas: 23'}
+ ]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ await page.locator('[data-view="bizi"]').click();
+ await page.locator('[data-view="buses"]').click();
+ expect(await page.locator('#busLineFilter').inputValue()).toBe('23');
+ await page.locator('#timelineSlider').evaluate(el=>{el.value='0';el.dispatchEvent(new Event('change',{bubbles:true}))});
+ await expect(page.locator('#timelineLabel')).toContainText('Historical capture');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c'); // 22-minute wait on line 23.
+ expect(await page.locator('#busLineFilter').inputValue()).toBe('23');
+ await page.locator('#timelineLatest').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+});
+
+test.describe('Spanish searchable bus line selector',()=>{
+ test.use({locale:'es-ES'});
+ test('shows translated labels and only the selected line in the popup',async({page})=>{
+  await setup(page);
+  const bus={...latest.bus,stops:[{...stop(798,3),name:'(798) Avenida Líneas: 23, 24',arrivals:[
+   {line:'23',minutes:3},{line:'24',minutes:40}
+  ]}],catalog:[{id:'tuzsa-798',name:'(798) Avenida Líneas: 23, 24',coords:stop(798,0).coords}]};
+  await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+  await page.reload();
+  await page.locator('[data-view="buses"]').click();
+  await expect(page.locator('.bus-line-filter')).toContainText('Filtrar el mapa por línea');
+  await expect(page.locator('#busLineFilter')).toHaveAttribute('placeholder','Todas las líneas · escribe o selecciona una línea');
+  await page.locator('#busLineFilter').fill('23');
+  await expect(page.locator('#busLineFilterStatus')).toContainText('Solo esta línea determina los colores');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Línea 23');
+  await expect(page.locator('.leaflet-popup-content')).not.toContainText('Línea 24:');
+ });
+});
