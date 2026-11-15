@@ -92,6 +92,7 @@ test('legacy timeline labels are repaired without changing observed measurements
  assert.equal(repaired[0].at,frames[0].at);
 });
 
+import {selectBusSample,nextBusSampleOffset} from '../scripts/bus-sampling.mjs';
 import {parseAvanzaArrivals,fetchAvanzaArrivals,AVANZA_URL,AVANZA_TIMEOUT_MS} from '../scripts/avanza-arrivals.mjs';
 test('Avanza arrivals are retained only when vehicle identifiers agree',()=>{
  const body='<li><a href="#"><strong>039<i></i>VADORREY</strong></a><ul><li><a href="https://gps.avanzabus.com/zaragoza/fParadas/744/9001"><i></i>9001 [3 mins]</a></li></ul></li>';
@@ -455,4 +456,25 @@ test('bus routes cannot be fabricated from unordered catalogues or invalid geome
   {type:'Feature',geometry:{type:'Point',coordinates:[-.88,41.66]}}
  ]}),[]);
  assert.deepEqual(busRoutePaths({type:'LineString',coordinates:[[500000,4600000],[510000,4610000]]}),[]);
+});
+
+test('partial full-network captures resume from first stop never queried, not the same start',()=>{
+ const stops=Array.from({length:983},(_,id)=>({id:'tuzsa-'+id}));
+ const first=selectBusSample(stops,666,1200);
+ assert.equal(first.size,983);
+ assert.equal(first.nextOffset,666,'a planned full sample originally stays at the same offset');
+ assert.equal(first.sample[0].id,'tuzsa-666');
+ const resumed=nextBusSampleOffset(stops,first.sample,552,first.nextOffset);
+ assert.equal(resumed,235);
+ const second=selectBusSample(stops,resumed,1200);
+ assert.equal(second.sample[0].id,'tuzsa-235');
+ assert.equal(second.sample[0].id,first.sample[552].id);
+ assert.equal(nextBusSampleOffset(stops,first.sample,983,first.nextOffset),666);
+});
+test('interleaved partial samples resume at next actually unqueried stop',()=>{
+ const stops=Array.from({length:9},(_,id)=>({id:'tuzsa-'+id}));
+ const plan=selectBusSample(stops,2,4);
+ assert.equal(nextBusSampleOffset(stops,plan.sample,0,plan.nextOffset),2);
+ assert.equal(nextBusSampleOffset(stops,plan.sample,2,plan.nextOffset),stops.findIndex(s=>s.id===plan.sample[2].id));
+ assert.equal(nextBusSampleOffset(stops,plan.sample,4,plan.nextOffset),plan.nextOffset);
 });
