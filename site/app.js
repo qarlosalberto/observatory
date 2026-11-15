@@ -52,15 +52,16 @@ function report(){
   ['Distinct operator vehicle IDs',observedVehicles||'—','From Avanza sampled stops only; not the city fleet'],
   ['Sampled stop coverage',state.snapshotBusPopulation?countShare(state.snapshotBusSampled,state.snapshotBusPopulation):'—','Queried in this captured frame'],
   ['Stops with verified arrivals',countShare(b.withETA,b.queried),b.queried+' queried stops'],
-  ['Stops with waits or gaps ≥15 min',countShare(b.redStops,b.withETA),b.longGapStops+' stops with long observed intervals']
+  ['Stops with inter-bus gaps ≥15 min',countShare(b.redStops,b.comparableStops),b.longGapStops+' stops with long observed intervals']
  ]);
  renderMetricCards('busKpis',[
   ['Stop-level arrival estimates',b.estimates||'—',b.withETA+' stops with an estimate'],
    ['Distinct operator vehicle IDs',observedVehicles||'—','One vehicle can appear at several stops'],
-  ['Predicted waits ≤5 min',countShare(b.quick,b.estimates),'Known predictions only'],
-  ['Waits 15–18 min',countShare(b.redWaits,b.estimates),'Red: 15 to 18 min'],
-  ['Waits >18 min',countShare(b.darkRedWaits,b.estimates),'Dark red: more than 18 min'],
-  ['Stops with waits or gaps ≥15 min',countShare(b.redStops,b.withETA),b.longGapStops+' stops with long observed intervals'],
+  ['Consecutive bus intervals',b.intervals.total||'—',b.comparableStops+' stops with consecutive buses'],
+  ['Intervals ≤5 min',countShare(b.intervals.short,b.intervals.total),'Differences between successive buses'],
+  ['Intervals 15–18 min',countShare(b.intervals.red,b.intervals.total),'Red: 15 to 18 min'],
+  ['Intervals >18 min',countShare(b.intervals.darkRed,b.intervals.total),'Dark red: more than 18 min'],
+  ['Stops with inter-bus gaps ≥15 min',countShare(b.redStops,b.comparableStops),b.longGapStops+' stops with long observed intervals'],
   ['API requests without a prediction',countShare(b.unknown,b.queried),'Separate from '+b.errors+' API errors']
  ]);
  renderMetricCards('biziKpis',[
@@ -78,7 +79,7 @@ function report(){
  $('busNote').textContent=`${b.estimates} stop-level arrival estimates from ${b.withETA} of ${state.snapshotBusSampled||b.queried} sampled stops (${percent(state.snapshotBusSampled||b.queried,state.snapshotBusPopulation)} of the published stop catalogue). ${observedVehicles} distinct Avanza vehicle IDs; one physical bus can appear at several stops. Municipal fallback ETAs may lack vehicle IDs. ${b.unknown} requests without predictions; ${b.errors} API errors. Unqueried stops are not counted as empty or late.`;
  chart('bikeChart','doughnut',['5+ available','1–4 available','Empty'],[s.good,s.low,s.empty],[color.green,color.yellow,color.red]);
  chart('faultChart','bar',s.pairedStations?['Available','Out of service']:['No data'],s.pairedStations?[s.pairedAvailable,s.pairedFaults]:[0],s.pairedStations?[color.green,color.yellow]:[color.grey]);
- chart('busChart','bar',['0–5 min','6–14 min','15–18 min','>18 min'],[b.quick,b.medium,b.redWaits,b.darkRedWaits],[color.green,color.blue,color.red,color.darkRed]);
+ chart('busChart','bar',['0–5 min','6–14 min','15–18 min','>18 min'],[b.intervals.short,b.intervals.medium,b.intervals.red,b.intervals.darkRed],[color.green,color.blue,color.red,color.darkRed]);
 }
 function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels:labels.map(x=>translateText(x)),datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
 function busIntervalClass(minutes){return minutes>18?'severe':minutes>=BUS_GAP_THRESHOLD?'over':minutes<=5?'wait-good':'wait-ok'}
@@ -294,10 +295,11 @@ function busMarkers(){
    if(!bounds.contains(stop.coords))continue;
    const arrivals=shownBusArrivals(stop);
    const valid=arrivals.filter(a=>Number.isFinite(a.minutes)&&a.minutes>=0&&a.minutes<=180);
-   const regularity=analyzeBusRegularity(arrivals),red=regularity.red;
+   const regularity=analyzeBusRegularity(arrivals),comparable=regularity.comparedGaps>0;
    active.add(stop.id);
-   const hex=!valid.length?color.grey:regularity.darkRed?color.darkRed:red?color.red:color.blue;
-   const size=!valid.length?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
+   // A prediction alone cannot establish bus frequency. No comparable pair = grey.
+   const hex=!comparable?color.grey:regularity.darkRed?color.darkRed:regularity.red?color.red:color.blue;
+   const size=!comparable?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
    const shape={radius:size,color:'#fff',weight:size>=17?2.5:1.5,fillColor:hex,fillOpacity:.94};
    const details=[
     [valid.length?(state.liveMode?'On-demand live reading':'Recorded at '+formatSnapshotTime(stop.observedAt||state.snapshotBusAt)) :state.busLineFilter?'No verified arrival prediction for line '+state.busLineFilter:'No verified arrival prediction'],
@@ -305,7 +307,7 @@ function busMarkers(){
     ...regularity.routes.flatMap(route=>{
      const label='Route '+route.line+(route.destination?' → '+route.destination:'');
      return [
-      ...(route.slowFirst?[[label+': first predicted bus in '+route.first+' min',busIntervalClass(route.first)]]:[]),
+      [[label+': first predicted bus in '+route.first+' min','unknown']],
       ...route.gaps.map(g=>[label+': '+g.from+' → '+g.to+' min · '+g.minutes+' min between buses',busIntervalClass(g.minutes)])
      ];
     }),
@@ -314,7 +316,7 @@ function busMarkers(){
      ...regularity.routes.flatMap(route=>route.observations.map(entry=>{
       const a=entry.arrival;
       const name='Route '+route.line+(route.destination?' → '+route.destination:'')+(a.vehicle?' · vehicle '+a.vehicle:'');
-      return [name+': '+entry.minutes+' min'+(entry.first?'':' · '+entry.interval+' min since previous bus'),busIntervalClass(entry.interval)];
+      return [name+': '+entry.minutes+' min'+(entry.first?'':' · '+entry.interval+' min since previous bus'),entry.first?'unknown':busIntervalClass(entry.interval)];
      })),
      ...arrivals.filter(a=>!a||!Number.isFinite(a.minutes)||a.minutes<0||a.minutes>180).map(a=>['Route '+String(a?.line??'?')+(a?.destination?' → '+a.destination:'')+': no prediction','unknown'])
     ]:[[stop.apiResult==='error'?'Provider request failed':stop.apiResult==='unsampled'?'Not sampled for this capture':'No prediction reported','unknown']])
