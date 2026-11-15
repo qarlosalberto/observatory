@@ -23,6 +23,7 @@ function formatSnapshotTime(at){
 }
 function report(){
  const s=summarizeBikes(state.stations),b=summarizeBuses(state.stops);
+ reportBusMapCoverage();
  const observedVehicles=new Set(state.stops.flatMap(stop=>stop.arrivals||[]).map(a=>a.vehicle).filter(id=>typeof id==='string'&&/^\d+$/.test(id))).size;
  const visible=state.map?state.stops.filter(x=>x.id.startsWith('tuzsa-')&&state.map.getBounds().pad(.12).contains(x.coords)):[];
  if(state.liveMode){
@@ -104,6 +105,18 @@ function stopServesSelectedLine(stop){
 function shownBusArrivals(stop){
  return arrivalsForLine(stop.arrivals,state.busLineFilter);
 }
+function reportBusMapCoverage(){
+ const target=$('busMapCoverage');
+ if(!target)return;
+ const stops=state.stops.filter(stopServesSelectedLine);
+ const verified=stops.filter(stop=>shownBusArrivals(stop).some(a=>Number.isFinite(a?.minutes)&&a.minutes>=0&&a.minutes<=180)).length;
+ const notQueried=stops.filter(stop=>stop.apiResult==='unsampled'||stop.apiResult==='pending').length;
+ const failed=stops.filter(stop=>stop.apiResult==='error').length;
+ const noEta=stops.length-verified-notQueried-failed;
+ target.textContent=stops.length
+  ?'Map coverage ('+(state.busLineFilter?'Line '+state.busLineFilter:'All lines')+'): '+verified+' stops with verified ETA; '+notQueried+' unqueried; '+noEta+' queried without ETA; '+failed+' request errors. Grey does not mean there are no buses.'
+  :'Bus map: awaiting observed stop coverage.';
+}
 function availableBusLines(){
  const lines=new Set();
  for(const catalogLines of state.busCatalogueLines.values())for(const line of catalogLines)lines.add(line);
@@ -169,6 +182,7 @@ function updateBusLineSelector(){
   status.textContent='All bus stops shown. This filter changes the map only.';
  }
  renderBusLineMatches();
+ reportBusMapCoverage();
 }
 /** Display the published municipality street geometry, not fabricated lines between unordered stops. */
 function syncBusRouteOverlay(){
