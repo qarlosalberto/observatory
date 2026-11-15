@@ -82,9 +82,9 @@ try{
  let known=0,unknown=0,errors=0,long=0,estimates=0,attempted=0;
  let incompleteReason=null;
  const failures=[],deadline=Date.now()+18*60*1000;
- for(let offset=0;offset<sample.length;offset+=6){
+ for(let offset=0;offset<sample.length;offset+=12){
   if(Date.now()>=deadline){incompleteReason='Collection time budget reached';break}
-  const batch=sample.slice(offset,offset+6);
+  const batch=sample.slice(offset,offset+12);
   await Promise.all(batch.map(async stop=>{
    try{
     let lines,source='avanza';
@@ -116,13 +116,19 @@ try{
   await new Promise(resolve=>setTimeout(resolve,150));
  }
  frame.bus.sampled=attempted;
+ // The capture can stop at its time budget. Resume with the next unqueried stop,
+ // not with the first stop of the same incomplete sampling cycle every time.
+ // selectBusSample's full-network nextOffset remains equal to its starting index.
+ frame.bus.nextSampleOffset=attempted<sample.length
+  ?discovered.findIndex(stop=>stop.id===sample[attempted].id)
+  :nextOffset;
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  frame.bus.completedAt=new Date().toISOString();
  if(errors===attempted)frame.bus.status='unavailable';
  snapshot.bus={status:errors===attempted?'unavailable':'ok',population:discovered.length,sampled:attempted,
-  known,unknown,errors,estimates,over15:long,sampling:size===discovered.length?'full':'rotating',
+  known,unknown,errors,estimates,over15:long,sampling:attempted===discovered.length?'full':'rotating',
   skipped:size-attempted,...(incompleteReason?{incompleteReason}:{}),
-  nextSampleOffset:nextOffset,completedAt:frame.bus.completedAt,
+  nextSampleOffset:frame.bus.nextSampleOffset,completedAt:frame.bus.completedAt,
   sources:{avanza:frame.bus.stops.filter(s=>s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.source==='municipal').length},
   verifiedBySource:{avanza:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='avanza').length,municipal:frame.bus.stops.filter(s=>s.status==='known'&&s.source==='municipal').length},
   ...(errors===attempted?{error:'All attempted bus arrival requests failed'}:{}),
