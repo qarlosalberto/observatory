@@ -15,6 +15,18 @@ export function selectBusSample(stops,priorOffset=0,limit=BUS_SAMPLE_LIMIT){
  return {sample,size,nextOffset:(start+size*stride)%total};
 }
 
+/**
+ * Captures may end before the full sample is queried. Resume with the first
+ * unqueried stop on the following run, including when the planned sample
+ * covered the entire network (where planned nextOffset equals its start).
+ */
+export function nextBusSampleOffset(stops,sample,attempted,plannedNextOffset){
+ if(attempted>=sample.length)return plannedNextOffset;
+ const next=sample[Math.max(0,attempted)];
+ const index=stops.findIndex(stop=>stop.id===next?.id);
+ return index>=0?index:plannedNextOffset;
+}
+
 
 // Preserve operator identity and destination alongside each observed stop-level ETA.
 // Municipal fallback predictions may legitimately have no vehicle identifier.
