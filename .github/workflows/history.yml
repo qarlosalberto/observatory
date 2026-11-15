@@ -1,8 +1,9 @@
 name: Capture and publish public-service history
 on:
   schedule:
-    # More trigger opportunities; only collect when the previous capture is older than 25 minutes.
-    - cron: '3,13,23,33,43,53 * * * *'
+    # Two opportunities each hour; collect only when the preceding capture began at least 55 minutes ago.
+    # Using capture start (not completion) avoids accidentally skipping every other hour.
+    - cron: '7,37 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -23,7 +24,7 @@ concurrency:
 jobs:
   capture:
     runs-on: ubuntu-latest
-    timeout-minutes: 28
+    timeout-minutes: 40
     environment:
       name: github-pages
     steps:
@@ -47,8 +48,8 @@ jobs:
           let due=true;
           try {
             const latest=JSON.parse(readFileSync('site/history/latest.json','utf8'));
-            const completed=Date.parse(latest.bus?.completedAt??latest.bus?.capturedAt??latest.at??'');
-            due=!Number.isFinite(completed)||Date.now()-completed>=25*60*1000;
+            const started=Date.parse(latest.bus?.capturedAt??latest.at??'');
+            due=!Number.isFinite(started)||Date.now()-started>=55*60*1000;
           } catch {}
           appendFileSync(process.env.GITHUB_OUTPUT,'capture='+due+'\n');
           NODE
