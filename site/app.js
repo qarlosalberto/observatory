@@ -174,6 +174,7 @@ function setBusLineFilter(text){
  const line=normalizeBusLine(text);
  const valid=line&&availableBusLines().includes(line)?line:'';
  if(valid!==state.busLineFilter){
+  state.map?.closePopup();
   state.busLineFilter=valid;
   for(const [id,marker] of state.markers)removeBus(id,marker);
   busMarkers();
@@ -181,7 +182,7 @@ function setBusLineFilter(text){
  }
  updateBusLineSelector();
 }
-function removeBus(id,marker){state.sl.removeLayer(marker.ring);state.markers.delete(id)}
+function removeBus(id,marker){marker.ring.closePopup();state.sl.removeLayer(marker.ring);state.markers.delete(id)}
 function busMarkers(){
  if(!state.map)return;
  const zoom=state.map.getZoom(),bounds=state.map.getBounds().pad(.2),active=new Set();
