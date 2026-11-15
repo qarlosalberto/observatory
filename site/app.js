@@ -109,7 +109,7 @@ function availableBusLines(){
  for(const stop of state.stops)for(const line of busLinesOf(stop))lines.add(line);
  return [...lines].sort((a,b)=>a.localeCompare(b,'es',{numeric:true}));
 }
-let busLineMenuIndex=0,busLineMenuAll=false;
+let busLineMenuIndex=0,busLineMenuAll=false,suppressBusLineFocus=false;
 function matchingBusLines(){
  const typed=busLineMenuAll?'':$('busLineFilter').value.trim().toUpperCase();
  return availableBusLines().filter(line=>line.includes(typed));
@@ -153,7 +153,9 @@ function chooseBusLine(line){
  $('busLineFilter').value=line;
  setBusLineFilter(line);
  closeBusLineMenu();
+ suppressBusLineFocus=true;
  $('busLineFilter').focus({preventScroll:true});
+ suppressBusLineFocus=false;
 }
 function updateBusLineSelector(){
  const lines=availableBusLines(),input=$('busLineFilter'),typed=input.value.trim(),status=$('busLineFilterStatus');
@@ -631,7 +633,7 @@ for(const button of document.querySelectorAll('[data-view]')){
 }
 $('aboutToggle').addEventListener('click',()=>{const intro=$('siteIntro'),open=intro.hidden;intro.hidden=!open;$('aboutToggle').setAttribute('aria-expanded',String(open));$('aboutToggle').setAttribute('aria-label',open?'Hide Observatory information':'More information about Observatory')});
 $('openIncidents').addEventListener('click',()=>selectView('incidents'));
-$('busLineFilter').addEventListener('focus',()=>openBusLineMenu());
+$('busLineFilter').addEventListener('focus',()=>{if(!suppressBusLineFocus)openBusLineMenu()});
 $('busLineFilter').addEventListener('input',e=>{busLineMenuAll=false;busLineMenuIndex=0;setBusLineFilter(e.target.value);openBusLineMenu()});
 $('busLineFilter').addEventListener('change',e=>setBusLineFilter(e.target.value));
 $('busLineFilter').addEventListener('keydown',e=>{
