@@ -1,6 +1,7 @@
 // Validate actual operator stop predictions without discarding verified vehicles in a partly malformed reply.
 export const AVANZA_URL='https://gps.avanzabus.com/index.php/zaragoza/fRefrescaEmpresaExternos';
-export const AVANZA_TIMEOUT_MS=10000;
+// Allow the operator extra time under load; keep retries bounded.
+export const AVANZA_TIMEOUT_MS=18000;
 const strip=s=>s.replace(/<[^>]+>/g,' ').replace(/&nbsp;?/gi,' ').replace(/\s+/g,' ').trim();
 
 export function parseAvanzaArrivals(data){
