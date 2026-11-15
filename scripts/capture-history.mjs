@@ -2,7 +2,7 @@
 import {readFile,writeFile,mkdir} from 'node:fs/promises';
 import {dirname} from 'node:path';
 import {fetchAvanzaArrivals} from './avanza-arrivals.mjs';
-import {BUS_SAMPLE_LIMIT,HISTORY_BUS_SAMPLE_LIMIT,selectBusSample,serializeBusArrivals} from './bus-sampling.mjs';
+import {BUS_SAMPLE_LIMIT,HISTORY_BUS_SAMPLE_LIMIT,selectBusSample,nextBusSampleOffset,serializeBusArrivals} from './bus-sampling.mjs';
 import {BUS_API,BIZI_GBFS,INCIDENT_API,asItems,coordsOf,stopId,parseBusLines,stationName,repairTimelineStationNames} from '../site/data.js';
 
 const paths={
@@ -119,9 +119,7 @@ try{
  // The capture can stop at its time budget. Resume with the next unqueried stop,
  // not with the first stop of the same incomplete sampling cycle every time.
  // selectBusSample's full-network nextOffset remains equal to its starting index.
- frame.bus.nextSampleOffset=attempted<sample.length
-  ?discovered.findIndex(stop=>stop.id===sample[attempted].id)
-  :nextOffset;
+ frame.bus.nextSampleOffset=nextBusSampleOffset(discovered,sample,attempted,nextOffset);
  frame.bus.stops.sort((a,b)=>a.id.localeCompare(b.id,'en',{numeric:true}));
  frame.bus.completedAt=new Date().toISOString();
  if(errors===attempted)frame.bus.status='unavailable';
