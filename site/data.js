@@ -76,6 +76,82 @@ export function arrivalsForLine(arrivals,line){
  return selected?(arrivals||[]).filter(a=>normalizeBusLine(a?.line)===selected):(arrivals||[]);
 }
 
+export const BUS_LINE_ROUTE_API='https://www.zaragoza.es/sede/servicio/urbanismo-infraestructuras/transporte-urbano';
+
+/**
+ * Read only explicitly published route geometry or the order of a line's
+ * own stop itinerary. The generic stop catalogue has no travel order and
+ * must never be connected by numeric IDs or by proximity.
+ * Returned paths use Leaflet [latitude, longitude] coordinates.
+ */
+export function busRoutePaths(data){
+ const paths=[],visited=new Set();
+ const geoPoint=point=>{
+  if(!Array.isArray(point)||point.length<2)return null;
+  const [lon,lat]=point.map(Number);
+  return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=41.2&&lat<=42.2&&lon>=-1.5&&lon<=-.3?[lat,lon]:null;
+ };
+ const stopPoint=stop=>{
+  const p=stop?.geometry?.coordinates||stop?.coordinates||stop?.coords;
+  const fromGeo=geoPoint(p);
+  if(fromGeo)return fromGeo;
+  if(Array.isArray(stop?.coords)&&stop.coords.length===2){
+   const [lat,lon]=stop.coords.map(Number);
+   return lat>=41.2&&lat<=42.2&&lon>=-1.5&&lon<=-.3?[lat,lon]:null;
+  }
+  const lat=Number(stop?.lat??stop?.latitude),lon=Number(stop?.lon??stop?.lng??stop?.longitude);
+  return Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=41.2&&lat<=42.2&&lon>=-1.5&&lon<=-.3?[lat,lon]:null;
+ };
+ function addPath(points){
+  if(!Array.isArray(points))return;
+  const valid=points.filter(point=>Array.isArray(point)&&point.length===2);
+  if(valid.length<2)return;
+  const cleaned=valid.filter((p,i)=>i===0||p[0]!==valid[i-1][0]||p[1]!==valid[i-1][1]);
+  if(cleaned.length>=2&&cleaned.length<=20000)paths.push(cleaned);
+ }
+ function orderedStops(stops){
+  if(!Array.isArray(stops)||stops.length<2||stops.length>3000)return;
+  const groups=new Map();
+  for(const [index,stop] of stops.entries()){
+   if(!stop||typeof stop!=='object')continue;
+   const pt=stopPoint(stop);
+   if(!pt)continue;
+   const direction=String(stop.sentido??stop.direction??stop.direccion??stop.idSentido??'');
+   const order=Number(stop.orden??stop.order??stop.secuencia??stop.sequence??stop.stop_sequence);
+   if(!groups.has(direction))groups.set(direction,[]);
+   groups.get(direction).push({pt,index,order:Number.isFinite(order)?order:null});
+  }
+  for(const group of groups.values()){
+   if(group.length<2)continue;
+   if(group.every(x=>x.order!==null))group.sort((a,b)=>a.order-b.order||a.index-b.index);
+   addPath(group.map(x=>x.pt));
+  }
+ }
+ function scan(value,depth=0){
+  if(depth>9||!value||typeof value!=='object'||visited.has(value))return;
+  visited.add(value);
+  if(Array.isArray(value)){for(const item of value)scan(item,depth+1);return}
+  const kind=String(value.type??'').toLowerCase();
+  const coordinates=value.coordinates;
+  if(kind==='linestring'){addPath(Array.isArray(coordinates)?coordinates.map(geoPoint):[]);return}
+  if(kind==='multilinestring'){
+   if(Array.isArray(coordinates))for(const segment of coordinates)addPath(Array.isArray(segment)?segment.map(geoPoint):[]);
+   return;
+  }
+  if(kind==='feature'&&value.geometry){scan(value.geometry,depth+1);return}
+  if(kind==='geometrycollection'&&Array.isArray(value.geometries)){scan(value.geometries,depth+1);return}
+  for(const [key,nested] of Object.entries(value)){
+   if(!nested||typeof nested!=='object')continue;
+   if(/^(paradas|stops|postes|stopList|listaParadas)$/i.test(key)&&Array.isArray(nested)){
+    orderedStops(nested);continue;
+   }
+   if(/^(geometry|geometria|shape|recorrido|recorridos|itinerario|itinerarios|trayecto|trayectos|ida|vuelta|sentidos|direcciones|result|data|features|routes|rutas|geometries|lineas|linea|lineaAutobus)$/i.test(key))scan(nested,depth+1);
+  }
+ }
+ scan(data);
+ return paths;
+}
+
 export const BIZI_LOW_MAX=4;
 export function summarizeBikes(stations){
  const known=stations.filter(s=>s.available!==null),pairs=stations.filter(s=>s.available!==null&&s.disabled!==null);
