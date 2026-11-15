@@ -16,7 +16,7 @@ The incident browser loads `site/history/incidents.json` by default. Users can e
 
 ## Data collection
 
-The `.github/workflows/history.yml` GitHub Actions workflow attempts collection every 30 minutes (at ten-minute trigger opportunities (with a freshness guard aiming for one full capture every 30 minutes)), and can also be run manually. Its collector, `scripts/capture-history.mjs`, creates:
+The `.github/workflows/history.yml` GitHub Actions workflow targets roughly one capture per hour (two scheduled opportunities per hour with a 55-minute freshness guard measured from the previous capture start), and can also be run manually. Avanza requests wait up to 18 seconds and municipal requests up to 24 seconds, with a 25-minute collection budget and a 40-minute job limit. Snapshot-only commits are deployed by the history workflow, rather than launching a second full test-and-deploy pipeline. Its collector, `scripts/capture-history.mjs`, creates:
 
 | Data file | Purpose | Retention |
 | --- | --- | --- |
@@ -28,7 +28,7 @@ The `.github/workflows/history.yml` GitHub Actions workflow attempts collection 
 
 Scheduled collection requires `GITHUB_TOKEN` permission to write to `main` and GitHub Pages deployment permissions. The collection workflow **publishes the generated site directly**, because commits pushed using `GITHUB_TOKEN` do not trigger a subsequent GitHub Actions push workflow.
 
-GitHub Actions cron is best-effort: even with more trigger opportunities, scheduled jobs may run late or be suspended. A strict 30-minute service-level guarantee requires an independent external scheduler. All initially empty files remain empty until the first successful capture; missing readings must not be presented as zeros or as fresh live data.
+GitHub Actions cron is best-effort: even with more trigger opportunities, scheduled jobs may run late or be suspended. A strict hourly service-level guarantee requires an independent external scheduler. All initially empty files remain empty until the first successful capture; missing readings must not be presented as zeros or as fresh live data.
 
 ### Source definitions and interpretation
 
