@@ -346,3 +346,21 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps >15 min');
 });
 
+
+test('bus map uses dark red only for first wait strictly above 18 minutes',async({page})=>{
+ await setup(page);
+ const withArrivals={...latest,bus:{...latest.bus,stops:[
+  stop(798,18),
+  stop(799,19),
+  {...stop(800,3),arrivals:[{line:'23',minutes:3},{line:'23',minutes:40}]}
+ ]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(3);
+ const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
+ expect(pins['tuzsa-798']).toBe('#d94749');
+ expect(pins['tuzsa-799']).toBe('#871a2c');
+ expect(pins['tuzsa-800']).toBe('#d94749');
+ await expect(page.locator('.bus-legend')).toContainText('Bus: first wait >18 min');
+});
