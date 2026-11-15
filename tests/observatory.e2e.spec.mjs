@@ -61,7 +61,7 @@ test('timeline changes map geometry and statistics without inventing observation
  await expect(page.locator('#timelineLabel')).toContainText('Historical capture');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
  const colors=await page.evaluate(()=>[...window.__observatoryTest.state.markers.values()].map(m=>m.ring.options.fillColor));
- expect(colors).toContain('#871a2c');
+ expect(colors).toContain('#89929f'); // A lone 22-minute arrival is not a comparable interval.
  await page.locator('#timelineLatest').click();
  await expect(page.locator('#overviewBike')).toHaveText('4');
  await expect(page.locator('#timelineLabel')).toContainText('Latest available capture');
@@ -408,17 +408,17 @@ test('red marks predicted gaps of 15 minutes or more even when the first bus arr
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
  expect(pins['tuzsa-798']).toBe('#871a2c');
  expect(pins['tuzsa-799']).toBe('#d94749'); // Exactly 15 minutes is a red interval
- expect(pins['tuzsa-800']).toBe('#d94749'); // 16 minutes to the first bus
- expect(pins['tuzsa-801']).toBe('#4274c7'); // two different lines are not consecutive
+ expect(pins['tuzsa-800']).toBe('#89929f'); // Lone ETA 16, not an interval
+ expect(pins['tuzsa-801']).toBe('#89929f'); // Different lines cannot form an interval
  expect(pins['tuzsa-802']).toBe('#89929f');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  await expect(page.locator('.leaflet-popup-content')).toContainText('37 min between buses');
  await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
- await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps ≥15 min');
+ await expect(page.locator('#busKpis')).toContainText('Stops with inter-bus gaps ≥15 min');
 });
 
 
-test('bus map uses dark red for waits or gaps strictly above 18 minutes',async({page})=>{
+test('bus map uses dark red for headways strictly above 18 minutes, not lone ETAs',async({page})=>{
  await setup(page);
  const withArrivals={...latest,bus:{...latest.bus,stops:[
   stop(798,18),
@@ -430,16 +430,16 @@ test('bus map uses dark red for waits or gaps strictly above 18 minutes',async({
  await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(3);
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
- expect(pins['tuzsa-798']).toBe('#d94749');
- expect(pins['tuzsa-799']).toBe('#871a2c');
+ expect(pins['tuzsa-798']).toBe('#89929f');
+ expect(pins['tuzsa-799']).toBe('#89929f');
  expect(pins['tuzsa-800']).toBe('#871a2c');
- await expect(page.locator('.bus-legend').filter({hasText:'Bus: wait or gap >18 min'})).toHaveCount(1);
+ await expect(page.locator('.bus-legend').filter({hasText:'Bus: interval >18 min'})).toHaveCount(1);
 });
 
-test('predicted wait chart separates 16–18 from >18 minutes using map colours',async({page})=>{
+test('inter-bus interval chart separates successive 15–18 and >18 minute headways',async({page})=>{
  await setup(page);
  const bus={...latest.bus,sampled:2,stops:[
-  {...stop(798,0),arrivals:[0,5,6,15,16,18,19,31].map((minutes,i)=>({line:String(30+i),minutes}))},
+  {...stop(798,0),arrivals:[...[0,5,11,26,43,62].map(minutes=>({line:'23',minutes})),...[2,5,23,44].map(minutes=>({line:'24',minutes}))]},
   {...stop(799,null),arrivals:[{line:'23',minutes:null},{line:'24',minutes:-1},{line:'25',minutes:181}]}
  ]};
  await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
@@ -456,9 +456,9 @@ test('predicted wait chart separates 16–18 from >18 minutes using map colours'
   colors:['#18875b','#4274c7','#d94749','#871a2c']
  });
  const cards=page.locator('#busKpis .kpi');
- await expect(cards.filter({hasText:'Waits 15–18 min'}).locator('strong')).toHaveText('3 (38%)');
- await expect(cards.filter({hasText:'Waits >18 min'}).locator('strong')).toHaveText('2 (25%)');
- await expect(page.locator('#busesView')).toContainText('not the intervals between buses');
+ await expect(cards.filter({hasText:'Intervals 15–18 min'}).locator('strong')).toHaveText('3 (38%)');
+ await expect(cards.filter({hasText:'Intervals >18 min'}).locator('strong')).toHaveText('2 (25%)');
+ await expect(page.locator('#busesView')).toContainText('difference between two successive predicted arrival times');
 });
 
 test.describe('Complete Spanish bus tab',()=>{
@@ -488,14 +488,14 @@ test.describe('Complete Spanish bus tab',()=>{
  });
 });
 
-test.describe('Spanish bus-wait chart categories',()=>{
+test.describe('Spanish inter-bus interval chart categories',()=>{
  test.use({locale:'es-ES'});
  test('new dark-red category and explanatory note are translated',async({page})=>{
   await setup(page);
   await page.locator('[data-view="buses"]').click();
-  await expect(page.locator('#busKpis')).toContainText('Esperas de 15 a 18 min');
-  await expect(page.locator('#busKpis')).toContainText('Esperas de más de 18 min');
-  await expect(page.locator('#busesView')).toContainText('La gráfica cuenta las predicciones de llegada válidas individuales');
+  await expect(page.locator('#busKpis')).toContainText('Intervalos de 15 a 18 min');
+  await expect(page.locator('#busKpis')).toContainText('Intervalos de más de 18 min');
+  await expect(page.locator('#busesView')).toContainText('la diferencia entre dos llegadas previstas consecutivas');
   await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.busChart?.data.labels)).toEqual(['0–5 min','6–14 min','15–18 min','>18 min']);
  });
 });
@@ -538,7 +538,7 @@ test('searchable line selector lists catalogue routes and filters bus pins and s
  expect(Object.keys(line23).sort()).toEqual(['tuzsa-798','tuzsa-799','tuzsa-801','tuzsa-803']);
  expect(line23['tuzsa-798']).toBe('#4274c7'); // Same stop is blue when only line 23 counts.
  expect(line23['tuzsa-799']).toBe('#89929f'); // A known route stop without an ETA stays visible.
- expect(line23['tuzsa-801']).toBe('#871a2c');
+ expect(line23['tuzsa-801']).toBe('#89929f'); // One ETA cannot establish an interval.
  expect(line23['tuzsa-803']).toBe('#89929f'); // Unsampled catalogue stop with a published route.
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  const popup=page.locator('.leaflet-popup-content');
@@ -549,7 +549,7 @@ test('searchable line selector lists catalogue routes and filters bus pins and s
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
  const line24=await pinColors();
  expect(line24['tuzsa-798']).toBe('#871a2c');
- expect(line24['tuzsa-800']).toBe('#d94749');
+ expect(line24['tuzsa-800']).toBe('#89929f'); // One ETA is not a measurable interval.
  await page.locator('#busLineFilter').fill('N3');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
  expect((await pinColors())['tuzsa-802']).toBe('#89929f');
@@ -571,16 +571,16 @@ test('bus line filter persists across historical frames and other service tabs',
  await page.reload();
  await page.locator('[data-view="buses"]').click();
  await page.locator('#busLineFilter').fill('23');
- await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#89929f');
  await page.locator('[data-view="bizi"]').click();
  await page.locator('[data-view="buses"]').click();
  expect(await page.locator('#busLineFilter').inputValue()).toBe('23');
  await page.locator('#timelineSlider').evaluate(el=>{el.value='0';el.dispatchEvent(new Event('change',{bubbles:true}))});
  await expect(page.locator('#timelineLabel')).toContainText('Historical capture');
- await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c'); // 22-minute wait on line 23.
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#89929f'); // Lone 22-minute wait, not a headway.
  expect(await page.locator('#busLineFilter').inputValue()).toBe('23');
  await page.locator('#timelineLatest').click();
- await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#89929f');
 });
 
 test.describe('Spanish searchable bus line selector',()=>{
@@ -628,7 +628,7 @@ test('searchable bus-line dropdown includes special EM3 service and supports Ent
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busLineFilter)).toBe('EM3');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
  const chosen=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-799')?.ring.options.fillColor);
- expect(chosen).toBe('#871a2c');
+ expect(chosen).toBe('#89929f'); // EM3 has only one published arrival.
  await page.locator('#busLineToggle').click();
  await expect(page.locator('#busLineMatches [role="option"]')).toHaveCount(2);
  await input.press('ArrowDown');
@@ -661,14 +661,14 @@ test('line 35 arrivals at 6 and 21 minutes turn red when the gap reaches 15',asy
  await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
  const first=page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 4328'});
  const second=page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 4882'});
- await expect(first).toHaveClass(/wait-ok/);
+ await expect(first).toHaveClass(/unknown/); // The first ETA is not a headway.
  await expect(second).toHaveClass(/over/);
  await expect(second).toContainText('21 min · 15 min since previous bus');
  await expect(second).not.toHaveClass(/severe/);
  await expect(page.locator('.leaflet-popup-content')).not.toContainText('Route 28');
- await expect(page.locator('.bus-legend').filter({hasText:'no wait/gap ≥15 min detected'})).toHaveCount(1);
+ await expect(page.locator('.bus-legend').filter({hasText:'measured intervals <15 min'})).toHaveCount(1);
  await page.locator('#busLineFilter').fill('28');
- await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#89929f'); // One arrival on line 28 cannot form a headway.
 });
 
 test('bus popup arrival text uses inter-bus gaps, not raw ETA for red and dark red',async({page})=>{
@@ -687,14 +687,14 @@ test('bus popup arrival text uses inter-bus gaps, not raw ETA for red and dark r
  await page.locator('#busLineFilter').fill('23');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  const rows=page.locator('.leaflet-popup-content .popup-line');
- await expect(rows.filter({hasText:'vehicle 1001'})).toHaveClass(/wait-good/); // first wait 3
+ await expect(rows.filter({hasText:'vehicle 1001'})).toHaveClass(/unknown/); // The first ETA 3 is not a headway
  await expect(rows.filter({hasText:'vehicle 1002'})).toHaveClass(/over/); // 19 - 3 = 16
  await expect(rows.filter({hasText:'vehicle 1002'})).not.toHaveClass(/severe/); // raw ETA 19 must NOT decide colour
  await expect(rows.filter({hasText:'vehicle 1002'})).toContainText('19 min · 16 min since previous bus');
  await expect(rows.filter({hasText:'vehicle 1003'})).toHaveClass(/severe/); // 40 - 19 = 21
  await page.locator('#busLineFilter').fill('24');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
- await expect(page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 2001'})).toHaveClass(/over/); // first wait 18
+ await expect(page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 2001'})).toHaveClass(/unknown/); // Lone ETA 18 is not a headway
  await expect(page.locator('.leaflet-popup-content').filter({hasText:'vehicle 2001'})).not.toContainText('vehicle 1002');
 });
 test.describe('Spanish popup headway colour semantics',()=>{
@@ -789,7 +789,7 @@ test('selected line draws a published route underneath bus pins; all lines remov
   {points:[[41.6518,-.8871],[41.6528,-.8861]],pane:'busRoutePane',interactive:false}
  ]);
  await expect(page.locator('#busRouteStatus')).toContainText('published itinerary');
- expect(await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ expect(await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#89929f');
  await page.locator('[data-view="bizi"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
  await expect(page.locator('#busRouteStatus')).toBeHidden();
