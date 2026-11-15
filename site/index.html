@@ -52,8 +52,11 @@
     <div class="bus-line-filter">
       <label for="busLineFilter">Filter map by bus line</label>
       <div class="bus-line-filter-controls">
-        <input id="busLineFilter" type="search" list="busLineOptions" placeholder="All lines · type or select a line" autocomplete="off" spellcheck="false" aria-describedby="busLineFilterStatus">
-        <datalist id="busLineOptions"></datalist>
+        <div class="bus-line-picker">
+          <input id="busLineFilter" type="search" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="busLineMatches" placeholder="All lines · type or select a line" autocomplete="off" spellcheck="false" aria-describedby="busLineFilterStatus">
+          <button id="busLineToggle" type="button" class="bus-line-toggle" aria-label="Show bus line options" aria-expanded="false" aria-controls="busLineMatches">▾</button>
+          <div id="busLineMatches" class="bus-line-matches" role="listbox" aria-label="Bus line options" hidden></div>
+        </div>
         <button id="clearBusLineFilter" type="button" class="secondary">All lines</button>
       </div>
       <p id="busLineFilterStatus" class="fineprint" role="status" aria-live="polite">All bus stops shown. This filter changes the map only.</p>
