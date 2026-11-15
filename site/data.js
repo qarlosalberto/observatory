@@ -44,6 +44,38 @@ export function parseBusLines(response){
  visit(response);
  return [...byLine].map(([line,minutes])=>({line,minutes})).sort((a,b)=>a.line.localeCompare(b.line,undefined,{numeric:true}));
 }
+/** Only accept genuine operator line identifiers, not free-text stop names. */
+export function normalizeBusLine(value){
+ const raw=String(value??'').trim().toUpperCase();
+ if(!/^(?:\d{1,3}|N\d{1,2}|CI\d{1,2}|C\d{1,2}|TRA|ESP)$/.test(raw))return '';
+ return /^\d+$/.test(raw)?String(Number(raw)):raw;
+}
+
+/**
+ * Stop catalogue titles contain an official "Líneas: 23, N5, 31" suffix.
+ * Include separately reported arrival lines because the catalogue can be stale;
+ * do not infer a route from a stop number or nearby geometry.
+ */
+export function busLinesOf(stop){
+ const lines=new Set();
+ const name=String(stop?.name??'');
+ const suffix=name.match(/L[ií]neas?\s*:\s*(.*)$/i)?.[1]??'';
+ for(const value of suffix.split(/[,;\s/]+/)){
+  const line=normalizeBusLine(value);
+  if(line)lines.add(line);
+ }
+ for(const a of stop?.arrivals||[]){
+  const line=normalizeBusLine(a?.line);
+  if(line)lines.add(line);
+ }
+ return [...lines];
+}
+
+export function arrivalsForLine(arrivals,line){
+ const selected=normalizeBusLine(line);
+ return selected?(arrivals||[]).filter(a=>normalizeBusLine(a?.line)===selected):(arrivals||[]);
+}
+
 export const BIZI_LOW_MAX=4;
 export function summarizeBikes(stations){
  const known=stations.filter(s=>s.available!==null),pairs=stations.filter(s=>s.available!==null&&s.disabled!==null);
