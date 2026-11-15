@@ -69,7 +69,7 @@ main{max-width:1320px;margin:auto;padding:26px 28px 64px}
 .bus-line-filter-controls{display:flex;gap:9px;align-items:center;min-width:0}
 .bus-line-picker{flex:1;min-width:0;position:relative}
 .bus-line-picker input{min-width:0;min-height:45px;width:100%;border:1px solid #cbdbe9;background:#fff;border-radius:10px;padding:10px 42px 10px 13px;color:#193750;font-size:13px}
-.bus-line-filter-controls>button{min-height:45px}
+.bus-line-filter-controls>button{min-height:45px;position:relative;z-index:1001}
 .bus-line-picker .bus-line-toggle{position:absolute;right:4px;top:4px;width:36px;height:37px;min-height:0;border:0;border-radius:8px;background:#e6edf5;color:#193750;cursor:pointer;font-size:19px}
 .bus-line-picker .bus-line-toggle:hover,.bus-line-picker .bus-line-toggle:focus-visible{background:#d5e3f3}
 .bus-line-matches{position:absolute;z-index:1000;top:calc(100% + 4px);left:0;right:0;max-height:min(270px,45vh);overflow-y:auto;overscroll-behavior:contain;border:1px solid #b6cada;border-radius:11px;background:#fff;box-shadow:0 12px 30px rgba(13,37,64,.20);padding:5px}
