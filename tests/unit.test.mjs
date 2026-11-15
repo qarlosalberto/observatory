@@ -379,3 +379,25 @@ test('filtered bus arrivals retain only matching lines with separate headway cal
  assert.deepEqual(arrivalsForLine(rows,'n3').map(x=>x.minutes),[null]);
  assert.equal(arrivalsForLine(rows,'').length,5);
 });
+
+test('individual popup headways compare each vehicle to the prior bus on the SAME route and destination',()=>{
+ const arr=[
+  {line:'35',destination:'PARQUE GOYA',minutes:21,vehicle:'4882'},
+  {line:'35',destination:'PARQUE GOYA',minutes:6,vehicle:'4328'},
+  {line:'28',destination:'CENTRO',minutes:40,vehicle:'9999'},
+  {line:'35',destination:'OTRO DESTINO',minutes:25,vehicle:'7777'},
+  {line:'35',destination:'PARQUE GOYA',minutes:24,vehicle:'4882'}
+ ];
+ const routes=analyzeBusRegularity(arr).routes;
+ const goya=routes.find(x=>x.line==='35'&&x.destination==='PARQUE GOYA');
+ assert.deepEqual(goya.observations.map(({minutes,first,interval})=>({minutes,first,interval})),[
+  {minutes:6,first:true,interval:6},
+  {minutes:21,first:false,interval:15}
+ ]);
+ assert.deepEqual(goya.gaps,[{from:6,to:21,minutes:15}]);
+ assert.equal(goya.observations[1].arrival.vehicle,'4882');
+ assert.deepEqual(routes.find(x=>x.line==='35'&&x.destination==='OTRO DESTINO').observations.map(x=>x.interval),[25]);
+ assert.deepEqual(routes.find(x=>x.line==='28').observations.map(x=>x.interval),[40]);
+ const severity=analyzeBusRegularity([{line:'23',minutes:3},{line:'23',minutes:19},{line:'23',minutes:40}]).routes[0].observations;
+ assert.deepEqual(severity.map(x=>x.interval),[3,16,21]);
+});
