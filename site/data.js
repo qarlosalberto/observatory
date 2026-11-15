@@ -89,7 +89,7 @@ export function analyzeBusRegularity(arrivals=[]){
   hasArrivals:routes.length>0,
   slowFirst:routes.some(r=>r.slowFirst),
   longGap:routes.some(r=>r.longGap),
-  darkRed:routes.some(r=>r.first>BUS_DARK_RED_WAIT_THRESHOLD),
+  darkRed:routes.some(r=>r.first>BUS_DARK_RED_WAIT_THRESHOLD||r.gaps.some(g=>g.minutes>BUS_DARK_RED_WAIT_THRESHOLD)),
   red:routes.some(r=>r.slowFirst||r.longGap),
   comparedGaps:routes.reduce((sum,r)=>sum+r.gaps.length,0)
  };
