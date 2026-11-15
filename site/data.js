@@ -164,7 +164,8 @@ export const BUS_DARK_RED_WAIT_THRESHOLD=18;
  * Compare successive predictions only within the same route and destination.
  * ETAs are minutes from one observation, not proof of published headways or punctuality.
  * A single predicted bus cannot establish the interval to an unreported next bus.
- * Distinct observations expose their first wait or preceding same-service gap for popup colouring.
+ * The first ETA is a waiting time, not an inter-bus interval: colour only real
+ * differences between consecutive verified vehicles of one route and direction.
  */
 export function analyzeBusRegularity(arrivals=[]){
  const byService=new Map();
@@ -192,7 +193,7 @@ export function analyzeBusRegularity(arrivals=[]){
   for(let i=1;i<times.length;i++)gaps.push({from:times[i-1],to:times[i],minutes:times[i]-times[i-1]});
   const observations=sorted.map((entry,i)=>({
    arrival:entry.arrival,minutes:entry.minutes,
-   first:i===0,interval:i===0?entry.minutes:entry.minutes-times[i-1]
+   first:i===0,interval:i===0?null:entry.minutes-times[i-1]
   }));
   const first=times[0];
   return {line,destination,first,gaps,observations,slowFirst:first>=BUS_GAP_THRESHOLD,longGap:gaps.some(x=>x.minutes>=BUS_GAP_THRESHOLD)};
@@ -200,10 +201,10 @@ export function analyzeBusRegularity(arrivals=[]){
  return {
   routes,
   hasArrivals:routes.length>0,
-  slowFirst:routes.some(r=>r.slowFirst),
+  slowFirst:routes.some(r=>r.slowFirst), // Retained as a separate first-bus wait diagnostic.
   longGap:routes.some(r=>r.longGap),
-  darkRed:routes.some(r=>r.first>BUS_DARK_RED_WAIT_THRESHOLD||r.gaps.some(g=>g.minutes>BUS_DARK_RED_WAIT_THRESHOLD)),
-  red:routes.some(r=>r.slowFirst||r.longGap),
+  darkRed:routes.some(r=>r.gaps.some(g=>g.minutes>BUS_DARK_RED_WAIT_THRESHOLD)),
+  red:routes.some(r=>r.longGap),
   comparedGaps:routes.reduce((sum,r)=>sum+r.gaps.length,0)
  };
 }
@@ -214,7 +215,11 @@ export function summarizeBuses(stops){
  const redWaits=estimates.filter(x=>x.minutes>=BUS_GAP_THRESHOLD&&x.minutes<=BUS_DARK_RED_WAIT_THRESHOLD).length;
  const darkRedWaits=estimates.filter(x=>x.minutes>BUS_DARK_RED_WAIT_THRESHOLD).length;
  const observed=stops.map(s=>analyzeBusRegularity(s.arrivals));
- return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<BUS_GAP_THRESHOLD).length,redWaits,darkRedWaits,long:redWaits+darkRedWaits,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(validETA)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:observed.reduce((n,x)=>n+x.comparedGaps,0)};
+ // Only successive ETAs within a service form comparable headways. The first
+ // advertised ETA is never included in these histogram intervals.
+ const gaps=observed.flatMap(x=>x.routes.flatMap(route=>route.gaps.map(g=>g.minutes)));
+ const intervals={total:gaps.length,short:gaps.filter(x=>x<=5).length,medium:gaps.filter(x=>x>5&&x<BUS_GAP_THRESHOLD).length,red:gaps.filter(x=>x>=BUS_GAP_THRESHOLD&&x<=BUS_DARK_RED_WAIT_THRESHOLD).length,darkRed:gaps.filter(x=>x>BUS_DARK_RED_WAIT_THRESHOLD).length};
+ return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<BUS_GAP_THRESHOLD).length,redWaits,darkRedWaits,long:redWaits+darkRedWaits,intervals,comparableStops:observed.filter(x=>x.comparedGaps>0).length,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(validETA)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:intervals.total};
 }
 
 /** Convert WGS84 or municipal UTM zone 30N coordinates to Leaflet coordinates. */
