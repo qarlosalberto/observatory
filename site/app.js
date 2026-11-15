@@ -202,7 +202,7 @@ function syncBusRouteOverlay(){
  state.busRouteWmsLayer=L.tileLayer.wms('https://idezar-sig.zaragoza.es/servicios/geoserver/movilidad/wms',{
   layers:'movilidad:MU3_lineas_bus',styles:'',format:'image/png',transparent:true,version:'1.1.1',
   CQL_FILTER:filter,opacity:.86,pane:'busRoutePane',maxZoom:19,
-  attribution:'Published bus route geometry: Ayuntamiento de Zaragoza · IDEZar'
+  attribution:translateText('Published bus route geometry: Ayuntamiento de Zaragoza · IDEZar')
  }).addTo(state.map);
 }
 function setBusLineFilter(text){
@@ -353,7 +353,7 @@ function refresh(force=false){
  if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}
  report();
 }
-function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='385';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.busRouteLayer=L.layerGroup().addTo(state.map);state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
+function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright',zoomInTitle:translateText('Zoom in'),zoomOutTitle:translateText('Zoom out')}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='385';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.busRouteLayer=L.layerGroup().addTo(state.map);state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
 function applyRecordedFrame(frame){
  state.liveMode=false;state.liveEpoch++;
  state.snapshotAt=frame?.at||null;
@@ -619,7 +619,7 @@ function renderIncidentMap(items){
 function initIncidentMap(){
  if(state.incidentMap||!window.L)return;
  state.incidentMap=L.map('incidentMap',{zoomControl:false}).setView([41.6488,-0.8891],12);
- L.control.zoom({position:'bottomright'}).addTo(state.incidentMap);
+ L.control.zoom({position:'bottomright',zoomInTitle:translateText('Zoom in'),zoomOutTitle:translateText('Zoom out')}).addTo(state.incidentMap);
  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.incidentMap);
  state.incidentLayer=L.layerGroup().addTo(state.incidentMap);
  renderIncidents();
