@@ -11,6 +11,7 @@ on:
       - 'scripts/capture-history.mjs'
       - 'scripts/avanza-arrivals.mjs'
       - 'scripts/bus-sampling.mjs'
+      - 'scripts/capture-bus-routes.mjs'
       - 'site/data.js'
 permissions:
   contents: write
@@ -56,12 +57,16 @@ jobs:
         if: steps.due.outputs.capture == 'true'
         run: |
           node --check scripts/capture-history.mjs
+          node --check scripts/capture-bus-routes.mjs
           node --check site/app.js
           node --check site/data.js
           npm test
       - name: Capture Zaragoza public APIs
         if: steps.due.outputs.capture == 'true'
         run: node scripts/capture-history.mjs
+      - name: Cache published bus-line itineraries
+        if: steps.due.outputs.capture == 'true'
+        run: node scripts/capture-bus-routes.mjs
       - name: Validate generated JSON files
         if: steps.due.outputs.capture == 'true'
         run: |
@@ -71,7 +76,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          history_files=(site/history/snapshots.json site/history/bus-details.json site/history/incidents.json site/history/latest.json site/history/timeline.json)
+          history_files=(site/history)
           base=$(git rev-parse HEAD)
           git add "${history_files[@]}"
           if ! git diff --cached --quiet; then
