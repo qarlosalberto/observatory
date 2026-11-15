@@ -561,8 +561,59 @@ test('line 35 arrivals at 6 and 21 minutes stay blue because their headway is ex
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  await expect(page.locator('.leaflet-popup-content')).toContainText('15 min between buses');
+ const first=page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 4328'});
+ const second=page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 4882'});
+ await expect(first).toHaveClass(/wait-ok/);
+ await expect(second).toHaveClass(/wait-ok/);
+ await expect(second).toContainText('21 min · 15 min since previous bus');
+ await expect(second).not.toHaveClass(/over|severe/);
  await expect(page.locator('.leaflet-popup-content')).not.toContainText('Route 28');
  await expect(page.locator('.bus-legend').filter({hasText:'no wait/gap over 15 min detected'})).toHaveCount(1);
  await page.locator('#busLineFilter').fill('28');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#871a2c');
+});
+
+test('bus popup arrival text uses inter-bus gaps, not raw ETA for red and dark red',async({page})=>{
+ await setup(page);
+ const bus={...latest.bus,stops:[{
+  ...stop(798,3),name:'(798) Avenida Líneas: 23, 24',arrivals:[
+   {line:'23',destination:'CENTRO',minutes:3,vehicle:'1001'},
+   {line:'23',destination:'CENTRO',minutes:19,vehicle:'1002'},
+   {line:'23',destination:'CENTRO',minutes:40,vehicle:'1003'},
+   {line:'24',destination:'SUR',minutes:18,vehicle:'2001'}
+  ]
+ }],catalog:[{id:'tuzsa-798',name:'(798) Avenida Líneas: 23, 24',coords:stop(798,0).coords}]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('23');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ const rows=page.locator('.leaflet-popup-content .popup-line');
+ await expect(rows.filter({hasText:'vehicle 1001'})).toHaveClass(/wait-good/); // first wait 3
+ await expect(rows.filter({hasText:'vehicle 1002'})).toHaveClass(/over/); // 19 - 3 = 16
+ await expect(rows.filter({hasText:'vehicle 1002'})).not.toHaveClass(/severe/); // raw ETA 19 must NOT decide colour
+ await expect(rows.filter({hasText:'vehicle 1002'})).toContainText('19 min · 16 min since previous bus');
+ await expect(rows.filter({hasText:'vehicle 1003'})).toHaveClass(/severe/); // 40 - 19 = 21
+ await page.locator('#busLineFilter').fill('24');
+ await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+ await expect(page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 2001'})).toHaveClass(/over/); // first wait 18
+ await expect(page.locator('.leaflet-popup-content')).not.toContainText('vehicle 1002');
+});
+test.describe('Spanish popup headway colour semantics',()=>{
+ test.use({locale:'es-ES'});
+ test('arrival row explains its wait since prior same-line bus',async({page})=>{
+  await setup(page);
+  const bus={...latest.bus,stops:[{...stop(798,6),name:'(78) Av. De Cataluña Líneas: 35',arrivals:[
+   {line:'35',destination:'PARQUE GOYA',minutes:6,vehicle:'4328'},
+   {line:'35',destination:'PARQUE GOYA',minutes:21,vehicle:'4882'}
+  ]}],catalog:[{id:'tuzsa-798',name:'(78) Av. De Cataluña Líneas: 35',coords:stop(798,0).coords}]};
+  await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+  await page.reload();
+  await page.locator('[data-view="buses"]').click();
+  await page.locator('#busLineFilter').fill('35');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+  const second=page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehículo 4882'});
+  await expect(second).toContainText('21 min · intervalo de 15 min respecto al anterior');
+  await expect(second).toHaveClass(/wait-ok/);
+ });
 });
