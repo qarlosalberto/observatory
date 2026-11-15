@@ -306,6 +306,45 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await expect(page.locator('#methodView')).toContainText('aproximadamente una captura por hora');
   await expect(page.locator('#methodView')).not.toContainText('one capture every 30 minutes');
  });
+ test('bus tab translates diagnostics, grey stops, source, severity and map controls',async({page})=>{
+  await setup(page);
+  const stops=[
+   {...stop(798,15),name:'(798) Avenida Líneas: 23',source:'avanza',status:'known'},
+   {...stop(799,null),name:'(799) Plaza Líneas: 23',status:'unknown',arrivals:[]},
+   {...stop(800,null),name:'(800) Calle Líneas: 23',status:'error',arrivals:[]}
+  ];
+  const catalog=[...stops.map(s=>({id:s.id,name:s.name,coords:s.coords})),
+   {id:'tuzsa-801',name:'(801) Pasaje Líneas: 23',coords:stop(801,null).coords}];
+  await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus:{
+   ...latest.bus,population:4,sampled:3,stops,catalog
+  }})));
+  await page.reload();
+  await page.locator('[data-view="buses"]').click();
+  await expect(page.locator('#busesView')).toContainText('Red de autobuses');
+  await expect(page.locator('#busKpis')).toContainText('Paradas con esperas o intervalos de 15 min o más');
+  await expect(page.locator('#busNote')).toContainText('estimaciones de llegada por parada');
+  await expect(page.locator('#busMapCoverage')).toContainText('1 paradas con predicciones verificadas; 1 sin consultar; 1 consultadas sin predicción; 1 errores de consulta');
+  await expect(page.locator('#busLineFilter')).toHaveAttribute('placeholder','Todas las líneas · escribe o selecciona una línea');
+  await expect(page.locator('.leaflet-control-zoom-in')).toHaveAttribute('title','Acercar');
+  await expect(page.locator('.leaflet-control-zoom-out')).toHaveAttribute('title','Alejar');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Proveedor: Operador Avanza');
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Línea 23');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-799').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('No se notificó ninguna predicción');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-800').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Falló la consulta al proveedor');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-801').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('No muestreada en esta captura');
+  await page.locator('#busLineFilter').fill('xnotreal');
+  await expect(page.locator('#busLineMatches')).toContainText('No hay líneas de autobús coincidentes');
+  await expect(page.locator('#busLineFilterStatus')).toContainText('Selecciona una línea de la lista');
+  await page.locator('#busLineFilter').fill('23');
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Línea 23)');
+  await expect(page.locator('#busRouteStatus')).toContainText('Línea 23: recorrido publicado');
+  await expect(page.locator('#busLineFilterStatus')).toContainText('4 paradas conocidas de la línea 23');
+  await expect(page.locator('#busesView')).not.toContainText(/Bus network|No prediction reported|Provider request failed|Not sampled for this capture|published itinerary|stops with verified ETA|known stops for line|Choose a line from the list|waits or gaps/);
+ });
  test('translates the long bus-to-bus gap shown on a red map marker',async({page})=>{
   await setup(page);
   const withArrivals={...latest,bus:{...latest.bus,stops:[{...stop(798,3),arrivals:[
