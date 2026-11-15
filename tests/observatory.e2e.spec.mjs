@@ -321,7 +321,7 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await page.reload();
   await page.locator('[data-view="buses"]').click();
   await expect(page.locator('#busesView')).toContainText('Red de autobuses');
-  await expect(page.locator('#busKpis')).toContainText('Paradas con esperas o intervalos de 15 min o más');
+  await expect(page.locator('#busKpis')).toContainText('Paradas con intervalos entre autobuses ≥15 min');
   await expect(page.locator('#busNote')).toContainText('estimaciones de llegada por parada');
   await expect(page.locator('#busMapCoverage')).toContainText('1 paradas con predicciones verificadas; 1 sin consultar; 1 consultadas sin predicción; 1 errores de consulta');
   await expect(page.locator('#busLineFilter')).toHaveAttribute('placeholder','Todas las líneas · escribe o selecciona una línea');
