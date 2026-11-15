@@ -362,5 +362,5 @@ test('bus map uses dark red for waits or gaps strictly above 18 minutes',async({
  expect(pins['tuzsa-798']).toBe('#d94749');
  expect(pins['tuzsa-799']).toBe('#871a2c');
  expect(pins['tuzsa-800']).toBe('#871a2c');
- await expect(page.locator('.bus-legend')).toContainText('Bus: wait or gap >18 min');
+ await expect(page.locator('.bus-legend').filter({hasText:'Bus: wait or gap >18 min'})).toHaveCount(1);
 });
