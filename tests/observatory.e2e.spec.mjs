@@ -742,3 +742,32 @@ test('bus route is not fabricated when municipal route data is unavailable',asyn
  expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
  expect(await page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
 });
+
+
+test('bus map distinguishes unqueried catalogue, genuine no-ETA responses and provider failures',async({page})=>{
+ await setup(page);
+ const stops=[
+  {...stop(798,5),name:'(798) Plaza Líneas: 23, 24',status:'known',arrivals:[{line:'23',minutes:5}]},
+  {...stop(799,null),name:'(799) Avenida Líneas: 23',status:'unknown',arrivals:[]},
+  {...stop(800,null),name:'(800) Calle Líneas: 23',status:'error',arrivals:[]}
+ ];
+ const catalog=[...stops.map(s=>({id:s.id,coords:s.coords,name:s.name})),
+  {id:'tuzsa-801',coords:stop(801,null).coords,name:'(801) Calle nueva Líneas: 23'}];
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus:{...latest.bus,population:4,sampled:3,stops,catalog}})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ const coverage=page.locator('#busMapCoverage');
+ await expect(coverage).toContainText('1 stops with verified ETA');
+ await expect(coverage).toContainText('1 unqueried');
+ await expect(coverage).toContainText('1 queried without ETA');
+ await expect(coverage).toContainText('1 request errors');
+ await page.locator('#busLineFilter').fill('23');
+ await expect(coverage).toContainText('Map coverage (Line 23)');
+ await expect(coverage).toContainText('1 unqueried');
+ await page.locator('#busLineFilter').fill('24');
+ await expect(coverage).toContainText('Map coverage (Line 24)');
+ await expect(coverage).toContainText('0 stops with verified ETA');
+ await expect(coverage).toContainText('1 queried without ETA');
+ await page.locator('#clearBusLineFilter').click();
+ await expect(coverage).toContainText('Map coverage (All lines)');
+});
