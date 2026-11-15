@@ -25,7 +25,7 @@ const previous=await readJson(paths.latest,null);
 async function get(url){
  for(let attempt=0;attempt<2;attempt++){
   try{
-   const response=await fetch(url,{signal:AbortSignal.timeout(16000),headers:{accept:'application/json'}});
+   const response=await fetch(url,{signal:AbortSignal.timeout(24000),headers:{accept:'application/json'}});
    if(!response.ok){
     const body=(await response.text()).replace(/<[^>]*>/g,' ').replace(/\s+/g,' ').trim().slice(0,100);
     const err=Error('HTTP '+response.status+(body?': '+body:''));
@@ -81,7 +81,7 @@ try{
  frame.bus={status:'ok',sampled:size,population:discovered.length,stops:[],nextSampleOffset:nextOffset};
  let known=0,unknown=0,errors=0,long=0,estimates=0,attempted=0;
  let incompleteReason=null;
- const failures=[],deadline=Date.now()+18*60*1000;
+ const failures=[],deadline=Date.now()+25*60*1000;
  for(let offset=0;offset<sample.length;offset+=12){
   if(Date.now()>=deadline){incompleteReason='Collection time budget reached';break}
   const batch=sample.slice(offset,offset+12);
