@@ -328,14 +328,14 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await expect(page.locator('.leaflet-control-zoom-in')).toHaveAttribute('title','Acercar');
   await expect(page.locator('.leaflet-control-zoom-out')).toHaveAttribute('title','Alejar');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
-  await expect(page.locator('.leaflet-popup-content')).toContainText('Proveedor: Operador Avanza');
-  await expect(page.locator('.leaflet-popup-content')).toContainText('Línea 23');
+  await expect(page.locator('.leaflet-popup-content').last()).toContainText('Proveedor: Operador Avanza');
+  await expect(page.locator('.leaflet-popup-content').last()).toContainText('Línea 23');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-799').ring.openPopup());
-  await expect(page.locator('.leaflet-popup-content')).toContainText('No se notificó ninguna predicción');
+  await expect(page.locator('.leaflet-popup-content').last()).toContainText('No se notificó ninguna predicción');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-800').ring.openPopup());
-  await expect(page.locator('.leaflet-popup-content')).toContainText('Falló la consulta al proveedor');
+  await expect(page.locator('.leaflet-popup-content').last()).toContainText('Falló la consulta al proveedor');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-801').ring.openPopup());
-  await expect(page.locator('.leaflet-popup-content')).toContainText('No muestreada en esta captura');
+  await expect(page.locator('.leaflet-popup-content').last()).toContainText('No muestreada en esta captura');
   await page.locator('#busLineFilter').fill('xnotreal');
   await expect(page.locator('#busLineMatches')).toContainText('No hay líneas de autobús coincidentes');
   await expect(page.locator('#busLineFilterStatus')).toContainText('Selecciona una línea de la lista');
@@ -358,7 +358,7 @@ test.describe('Spanish (Spain) browser localization',()=>{
   expect(red).toBe('#871a2c');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
   await expect(page.locator('.leaflet-popup-content')).toContainText('intervalo de 37 min');
-  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo ≥15 y ≤18 min'})).toHaveCount(1);
+  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: intervalo ≥15 y ≤18 min'})).toHaveCount(1);
  });
 });
 test.describe('non-Spanish locale falls back to English',()=>{
