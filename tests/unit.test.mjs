@@ -324,3 +324,23 @@ test('dark red bus wait or headway is strictly greater than 18 minutes',()=>{
  assert.equal(mixed.darkRed,true,'one route with first wait >18 min is sufficient');
  assert.equal(analyzeBusRegularity([{line:'23',minutes:null}]).darkRed,false);
 });
+
+test('predicted waiting-time histogram has exclusive red and dark-red buckets',()=>{
+ const arrivals=[0,5,6,15,16,18,19,31,null,-1,181].map(minutes=>({line:'23',minutes}));
+ const stats=summarizeBuses([{arrivals,checked:1,apiResult:'known'}]);
+ assert.equal(stats.estimates,8,'invalid or absent ETAs are excluded');
+ assert.equal(stats.quick,2);
+ assert.equal(stats.medium,2);
+ assert.equal(stats.redWaits,2);
+ assert.equal(stats.darkRedWaits,2);
+ assert.equal(stats.long,4,'legacy >15-minute count still includes both red categories');
+ assert.equal(stats.withETA,1);
+ assert.equal(stats.quick+stats.medium+stats.redWaits+stats.darkRedWaits,stats.estimates);
+ const onlyBoundary=summarizeBuses([{arrivals:[{line:'23',minutes:18}],checked:1,apiResult:'known'}]);
+ assert.equal(onlyBoundary.redWaits,1);
+ assert.equal(onlyBoundary.darkRedWaits,0,'exactly 18 min is standard red');
+ const noData=summarizeBuses([{arrivals:[{line:'23',minutes:null}],checked:1,apiResult:'unknown'}]);
+ assert.equal(noData.estimates,0);
+ assert.equal(noData.darkRedWaits,0);
+ assert.equal(noData.withETA,0);
+});

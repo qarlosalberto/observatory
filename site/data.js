@@ -96,9 +96,12 @@ export function analyzeBusRegularity(arrivals=[]){
 }
 
 export function summarizeBuses(stops){
- const estimates=stops.flatMap(s=>s.arrivals||[]).filter(x=>x.minutes!==null);
+ const validETA=a=>Number.isFinite(a?.minutes)&&a.minutes>=0&&a.minutes<=180;
+ const estimates=stops.flatMap(s=>s.arrivals||[]).filter(validETA);
+ const redWaits=estimates.filter(x=>x.minutes>BUS_GAP_THRESHOLD&&x.minutes<=BUS_DARK_RED_WAIT_THRESHOLD).length;
+ const darkRedWaits=estimates.filter(x=>x.minutes>BUS_DARK_RED_WAIT_THRESHOLD).length;
  const observed=stops.map(s=>analyzeBusRegularity(s.arrivals));
- return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<=15).length,long:estimates.filter(x=>x.minutes>15).length,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(a=>a.minutes!==null)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:observed.reduce((n,x)=>n+x.comparedGaps,0)};
+ return {estimates:estimates.length,quick:estimates.filter(x=>x.minutes<=5).length,medium:estimates.filter(x=>x.minutes>5&&x.minutes<=BUS_GAP_THRESHOLD).length,redWaits,darkRedWaits,long:redWaits+darkRedWaits,queried:stops.filter(s=>s.checked>0).length,withETA:stops.filter(s=>(s.arrivals||[]).some(validETA)).length,unknown:stops.filter(s=>s.apiResult==='unknown').length,errors:stops.filter(s=>s.apiResult==='error').length,redStops:observed.filter(x=>x.red).length,longGapStops:observed.filter(x=>x.longGap).length,comparedGaps:observed.reduce((n,x)=>n+x.comparedGaps,0)};
 }
 
 /** Convert WGS84 or municipal UTM zone 30N coordinates to Leaflet coordinates. */

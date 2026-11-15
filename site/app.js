@@ -57,7 +57,8 @@ function report(){
   ['Stop-level arrival estimates',b.estimates||'—',b.withETA+' stops with an estimate'],
    ['Distinct operator vehicle IDs',observedVehicles||'—','One vehicle can appear at several stops'],
   ['Predicted waits ≤5 min',countShare(b.quick,b.estimates),'Known predictions only'],
-  ['Waits >15 min',countShare(b.long,b.estimates),'Not proof of lateness'],
+  ['Waits 16–18 min',countShare(b.redWaits,b.estimates),'Red: more than 15 and up to 18 min'],
+  ['Waits >18 min',countShare(b.darkRedWaits,b.estimates),'Dark red: more than 18 min'],
   ['Stops with waits or gaps >15 min',countShare(b.redStops,b.withETA),b.longGapStops+' stops with long observed intervals'],
   ['API requests without a prediction',countShare(b.unknown,b.queried),'Separate from '+b.errors+' API errors']
  ]);
@@ -76,7 +77,7 @@ function report(){
  $('busNote').textContent=`${b.estimates} stop-level arrival estimates from ${b.withETA} of ${state.snapshotBusSampled||b.queried} sampled stops (${percent(state.snapshotBusSampled||b.queried,state.snapshotBusPopulation)} of the published stop catalogue). ${observedVehicles} distinct Avanza vehicle IDs; one physical bus can appear at several stops. Municipal fallback ETAs may lack vehicle IDs. ${b.unknown} requests without predictions; ${b.errors} API errors. Unqueried stops are not counted as empty or late.`;
  chart('bikeChart','doughnut',['5+ available','1–4 available','Empty'],[s.good,s.low,s.empty],[color.green,color.yellow,color.red]);
  chart('faultChart','bar',s.pairedStations?['Available','Out of service']:['No data'],s.pairedStations?[s.pairedAvailable,s.pairedFaults]:[0],s.pairedStations?[color.green,color.yellow]:[color.grey]);
- chart('busChart','bar',['0–5 min','6–15 min','>15 min'],[b.quick,b.medium,b.long],[color.green,color.blue,color.red]);
+ chart('busChart','bar',['0–5 min','6–15 min','16–18 min','>18 min'],[b.quick,b.medium,b.redWaits,b.darkRedWaits],[color.green,color.blue,color.red,color.darkRed]);
 }
 function chart(id,type,labels,data,colors){if(!window.Chart)return;state.charts[id]?.destroy();state.charts[id]=new window.Chart($(id),{type,data:{labels:labels.map(x=>translateText(x)),datasets:[{data,backgroundColor:colors,borderWidth:0,borderRadius:type==='bar'?5:0}]},options:{responsive:true,maintainAspectRatio:false,animation:false,plugins:{legend:{display:type==='doughnut',position:'bottom'}},...(type==='bar'?{scales:{y:{beginAtZero:true,ticks:{precision:0}}}}:{})}})}
 function popup(title,details){const div=document.createElement('div'),strong=document.createElement('strong');strong.textContent=title;div.append(strong);for(const [line,cls] of details){const p=document.createElement('div');p.className='popup-line'+(cls?' '+cls:'');p.textContent=line;div.append(p)}return div}
