@@ -40,7 +40,8 @@ jobs:
         env:
           EVENT_NAME: ${{ github.event_name }}
         run: |
-          if [ "$EVENT_NAME" != "schedule" ]; then
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            # An explicit manual run can override the automatic hourly interval.
             echo "capture=true" >> "$GITHUB_OUTPUT"
           else
             node --input-type=module <<'NODE'
