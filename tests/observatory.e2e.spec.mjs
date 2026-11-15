@@ -380,12 +380,12 @@ test('predicted wait chart separates 16–18 from >18 minutes using map colours'
   return {labels:item.data.labels,data:item.data.datasets[0].data,colors:item.data.datasets[0].backgroundColor};
  });
  expect(chart).toEqual({
-  labels:['0–5 min','6–15 min','16–18 min','>18 min'],
-  data:[2,2,2,2],
+  labels:['0–5 min','6–14 min','15–18 min','>18 min'],
+  data:[2,1,3,2],
   colors:['#18875b','#4274c7','#d94749','#871a2c']
  });
  const cards=page.locator('#busKpis .kpi');
- await expect(cards.filter({hasText:'Waits 16–18 min'}).locator('strong')).toHaveText('2 (25%)');
+ await expect(cards.filter({hasText:'Waits 15–18 min'}).locator('strong')).toHaveText('3 (38%)');
  await expect(cards.filter({hasText:'Waits >18 min'}).locator('strong')).toHaveText('2 (25%)');
  await expect(page.locator('#busesView')).toContainText('not the intervals between buses');
 });
@@ -395,10 +395,10 @@ test.describe('Spanish bus-wait chart categories',()=>{
  test('new dark-red category and explanatory note are translated',async({page})=>{
   await setup(page);
   await page.locator('[data-view="buses"]').click();
-  await expect(page.locator('#busKpis')).toContainText('Esperas de 16 a 18 min');
+  await expect(page.locator('#busKpis')).toContainText('Esperas de 15 a 18 min');
   await expect(page.locator('#busKpis')).toContainText('Esperas de más de 18 min');
   await expect(page.locator('#busesView')).toContainText('La gráfica cuenta las predicciones de llegada válidas individuales');
-  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.busChart?.data.labels)).toEqual(['0–5 min','6–15 min','16–18 min','>18 min']);
+  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.busChart?.data.labels)).toEqual(['0–5 min','6–14 min','15–18 min','>18 min']);
  });
 });
 
