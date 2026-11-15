@@ -412,3 +412,47 @@ test('stop 78 line 35 at 6 and 21 minutes is red because the gap is exactly 15',
  assert.equal(analyzeBusRegularity([{line:'35',minutes:14}]).red,false);
  assert.equal(analyzeBusRegularity([{line:'35',minutes:15}]).red,true);
 });
+
+import {busRoutePaths} from '../site/data.js';
+
+test('municipal GeoJSON line and multilinestring geometry keeps distinct published segments',()=>{
+ const route={type:'FeatureCollection',features:[
+  {type:'Feature',geometry:{type:'LineString',coordinates:[[-.8891,41.6488],[-.8881,41.6498],[-.8871,41.6518]]}},
+  {type:'Feature',geometry:{type:'MultiLineString',coordinates:[
+   [[-.8861,41.6528],[-.8851,41.6538]],
+   [[-.8841,41.6548],[-.8831,41.6558]]
+  ]}}
+ ]};
+ assert.deepEqual(busRoutePaths(route),[
+  [[41.6488,-.8891],[41.6498,-.8881],[41.6518,-.8871]],
+  [[41.6528,-.8861],[41.6538,-.8851]],
+  [[41.6548,-.8841],[41.6558,-.8831]]
+ ]);
+});
+
+test('municipal line ordered stops draw separate directions and explicit stop sequences',()=>{
+ const detail={result:{sentidos:[
+  {paradas:[
+   {sentido:'ida',orden:3,geometry:{coordinates:[-.87,41.67]}},
+   {sentido:'ida',orden:1,geometry:{coordinates:[-.89,41.65]}},
+   {sentido:'ida',orden:2,geometry:{coordinates:[-.88,41.66]}}
+  ]},
+  {paradas:[{coords:[41.67,-.87]},{coords:[41.66,-.88]},{coords:[41.65,-.89]}]}
+ ]}};
+ assert.deepEqual(busRoutePaths(detail),[
+  [[41.65,-.89],[41.66,-.88],[41.67,-.87]],
+  [[41.67,-.87],[41.66,-.88],[41.65,-.89]]
+ ]);
+});
+
+test('bus routes cannot be fabricated from unordered catalogues or invalid geometry',()=>{
+ assert.deepEqual(busRoutePaths({catalog:[
+  {id:'tuzsa-1',coords:[41.65,-.89]},
+  {id:'tuzsa-2',coords:[41.66,-.88]}
+ ]}),[]);
+ assert.deepEqual(busRoutePaths({type:'FeatureCollection',features:[
+  {type:'Feature',geometry:{type:'Point',coordinates:[-.89,41.65]}},
+  {type:'Feature',geometry:{type:'Point',coordinates:[-.88,41.66]}}
+ ]}),[]);
+ assert.deepEqual(busRoutePaths({type:'LineString',coordinates:[[500000,4600000],[510000,4610000]]}),[]);
+});
