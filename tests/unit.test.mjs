@@ -352,6 +352,8 @@ test('catalogue route metadata enumerates lines even without predicted arrivals'
  assert.deepEqual(busLinesOf({name:'Líneas: TRA, ESP'}),['TRA','ESP']);
  assert.deepEqual(busLinesOf({name:'(5) Líneas: '}),[]);
  assert.equal(normalizeBusLine('  ci4 '),'CI4');
+ assert.equal(normalizeBusLine('em3'),'EM3','alphanumeric special-service routes must remain selectable');
+ assert.deepEqual(busLinesOf({name:'Stop 71 Líneas: EM3, Ci4',arrivals:[]}),['EM3','CI4']);
  assert.equal(normalizeBusLine('039'),'39');
  assert.equal(normalizeBusLine('Unknown route 9'),'');
 });
