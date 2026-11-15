@@ -478,3 +478,32 @@ test('interleaved partial samples resume at next actually unqueried stop',()=>{
  assert.equal(nextBusSampleOffset(stops,plan.sample,2,plan.nextOffset),stops.findIndex(s=>s.id===plan.sample[2].id));
  assert.equal(nextBusSampleOffset(stops,plan.sample,4,plan.nextOffset),plan.nextOffset);
 });
+
+import {readFileSync} from 'node:fs';
+import {translateText} from '../site/i18n.js';
+
+test('specific route statuses and nested map-coverage labels are fully translated into Spanish',()=>{
+ assert.equal(translateText('Line 35: loading published route…','es-ES'),'Línea 35: cargando el recorrido publicado…');
+ assert.equal(translateText('Line 35: published itinerary · 2 segments. Connections between stops may be schematic.','es-ES'),
+  'Línea 35: recorrido publicado · 2 tramos. Las conexiones entre paradas pueden ser esquemáticas.');
+ assert.equal(translateText('Line 35: municipal street-route overlay selected. Some services may not have published geometry.','es-ES'),
+  'Línea 35: activada la capa municipal del trazado. Algunos servicios pueden no tener geometría publicada.');
+ assert.equal(translateText('Map coverage (Line 35): 52 stops with verified ETA; 200 unqueried; 5 queried without ETA; 2 request errors. Grey does not mean there are no buses.','es-ES'),
+  'Cobertura del mapa (Línea 35): 52 paradas con predicciones verificadas; 200 sin consultar; 5 consultadas sin predicción; 2 errores de consulta. El gris no significa que no circulen autobuses.');
+ assert.match(translateText('Map coverage (All lines): 3 stops with verified ETA; 1 unqueried; 0 queried without ETA; 0 request errors. Grey does not mean there are no buses.','es-ES'),/Cobertura del mapa \(Todas las líneas\)/);
+ assert.equal(translateText(' · Loading…','es-ES'),' · Cargando…');
+ assert.equal(translateText(' · Live source currently unavailable','es-ES'),' · La fuente en directo no está disponible');
+ assert.match(translateText('On-demand live requests · 1/3 visible bus stops queried · 2 stops with predictions · 0 bus errors · Loading…','es-ES'),/· Cargando…$/);
+ assert.equal(translateText('Line 35: loading published route…','en'),'Line 35: loading published route…');
+});
+
+test('static page copy and accessibility labels have Spanish translations, except proper names',()=>{
+ const html=readFileSync(new URL('../site/index.html',import.meta.url),'utf8')
+  .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi,'')
+  .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'');
+ const values=html.split(/<[^>]*>/g).map(s=>s.replace(/&gt;/g,'>').replace(/&lt;/g,'<').replace(/&amp;/g,'&').replace(/&nbsp;/g,' ').trim())
+  .concat([...html.matchAll(/\b(?:aria-label|title|placeholder|alt)="([^"]+)"/g)].map(m=>m[1]))
+  .filter(s=>/[A-Za-z]{3,}/.test(s)&&!/^(?:observatory\.?|Bizi|Zaragoza)$/i.test(s));
+ const missing=[...new Set(values.filter(s=>translateText(s,'es-ES')===s))];
+ assert.deepEqual(missing,[],'Every authored visible label or accessibility string needs a translation');
+});
