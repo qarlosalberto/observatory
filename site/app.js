@@ -4,7 +4,7 @@ import {locale,translateText,initTranslations} from './i18n.js';
 initTranslations();
 const $=id=>document.getElementById(id);
 const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null};
-const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',blue:'#4274c7',grey:'#89929f'};
+const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',darkRed:'#871a2c',blue:'#4274c7',grey:'#89929f'};
 const percent=(count,total)=>total>0?Math.round(100*count/total)+'%':'—';
 const countShare=(count,total)=>total>0?`${count} (${percent(count,total)})`:'—';
 async function getJson(url){const c=new AbortController(),timer=setTimeout(()=>c.abort(),12000);try{const r=await fetch(url,{signal:c.signal,headers:{Accept:'application/json'},cache:'no-store'});if(!r.ok)throw Error('HTTP '+r.status);return await r.json()}finally{clearTimeout(timer)}}
@@ -105,7 +105,7 @@ function busMarkers(){
    const valid=(stop.arrivals||[]).filter(a=>Number.isFinite(a.minutes)&&a.minutes>=0&&a.minutes<=180);
    const regularity=analyzeBusRegularity(stop.arrivals),red=regularity.red;
    active.add(stop.id);
-   const hex=!valid.length?color.grey:red?color.red:color.blue;
+   const hex=!valid.length?color.grey:regularity.darkRed?color.darkRed:red?color.red:color.blue;
    const size=!valid.length?(zoom>=14?7:5):zoom>=14?17:zoom===13?12:9;
    const shape={radius:size,color:'#fff',weight:size>=17?2.5:1.5,fillColor:hex,fillOpacity:.94};
    const details=[
