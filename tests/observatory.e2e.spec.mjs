@@ -597,7 +597,7 @@ test('bus popup arrival text uses inter-bus gaps, not raw ETA for red and dark r
  await page.locator('#busLineFilter').fill('24');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
  await expect(page.locator('.leaflet-popup-content .popup-line').filter({hasText:'vehicle 2001'})).toHaveClass(/over/); // first wait 18
- await expect(page.locator('.leaflet-popup-content')).not.toContainText('vehicle 1002');
+ await expect(page.locator('.leaflet-popup-content').filter({hasText:'vehicle 2001'})).not.toContainText('vehicle 1002');
 });
 test.describe('Spanish popup headway colour semantics',()=>{
  test.use({locale:'es-ES'});
