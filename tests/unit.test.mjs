@@ -414,7 +414,7 @@ test('stop 78 line 35 at 6 and 21 minutes is red because the gap is exactly 15',
  assert.equal(result.longGap,true);
  assert.deepEqual(result.routes[0].gaps,[{from:6,to:21,minutes:15}]);
  assert.equal(analyzeBusRegularity([{line:'35',minutes:14}]).red,false);
- assert.equal(analyzeBusRegularity([{line:'35',minutes:15}]).red,true);
+ assert.equal(analyzeBusRegularity([{line:'35',minutes:15}]).red,false); // A lone ETA provides no interval to compare.
 });
 
 import {busRoutePaths} from '../site/data.js';
