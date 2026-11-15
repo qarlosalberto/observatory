@@ -287,7 +287,7 @@ test.describe('Spanish (Spain) browser localization',()=>{
   expect(red).toBe('#d94749');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
   await expect(page.locator('.leaflet-popup-content')).toContainText('intervalo de 37 min');
-  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 min'})).toHaveCount(1);
+  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 y ≤18 min'})).toHaveCount(1);
  });
 });
 test.describe('non-Spanish locale falls back to English',()=>{
@@ -337,7 +337,7 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
  expect(pins['tuzsa-798']).toBe('#d94749');
  expect(pins['tuzsa-799']).toBe('#4274c7'); // 15-minute interval is allowed
- expect(pins['tuzsa-800']).toBe('#d94749'); // 16 minutes to the first bus
+ expect(pins['tuzsa-800']).toBe('#871a2c'); // 16 minutes to the first bus
  expect(pins['tuzsa-801']).toBe('#4274c7'); // two different lines are not consecutive
  expect(pins['tuzsa-802']).toBe('#89929f');
  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
@@ -347,7 +347,7 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
 });
 
 
-test('bus map uses dark red only for first wait strictly above 18 minutes',async({page})=>{
+test('bus map uses dark red for waits or gaps strictly above 18 minutes',async({page})=>{
  await setup(page);
  const withArrivals={...latest,bus:{...latest.bus,stops:[
   stop(798,18),
@@ -362,5 +362,5 @@ test('bus map uses dark red only for first wait strictly above 18 minutes',async
  expect(pins['tuzsa-798']).toBe('#d94749');
  expect(pins['tuzsa-799']).toBe('#871a2c');
  expect(pins['tuzsa-800']).toBe('#d94749');
- await expect(page.locator('.bus-legend')).toContainText('Bus: first wait >18 min');
+ await expect(page.locator('.bus-legend')).toContainText('Bus: wait or gap >18 min');
 });
