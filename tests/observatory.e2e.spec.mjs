@@ -57,7 +57,7 @@ test('timeline changes map geometry and statistics without inventing observation
  await expect(page.locator('#timelineLabel')).toContainText('Historical capture');
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
  const colors=await page.evaluate(()=>[...window.__observatoryTest.state.markers.values()].map(m=>m.ring.options.fillColor));
- expect(colors).toContain('#d94749');
+ expect(colors).toContain('#871a2c');
  await page.locator('#timelineLatest').click();
  await expect(page.locator('#overviewBike')).toHaveText('4');
  await expect(page.locator('#timelineLabel')).toContainText('Latest available capture');
@@ -284,10 +284,10 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await page.reload();
   await page.locator('[data-view="buses"]').click();
   const red=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.options.fillColor);
-  expect(red).toBe('#d94749');
+  expect(red).toBe('#871a2c');
   await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
   await expect(page.locator('.leaflet-popup-content')).toContainText('intervalo de 37 min');
-  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 min'})).toHaveCount(1);
+  await expect(page.locator('.bus-legend').filter({hasText:'Autobús: espera o intervalo >15 y ≤18 min'})).toHaveCount(1);
  });
 });
 test.describe('non-Spanish locale falls back to English',()=>{
@@ -335,7 +335,7 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(5);
  const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,marker])=>[id,marker.ring.options.fillColor])));
- expect(pins['tuzsa-798']).toBe('#d94749');
+ expect(pins['tuzsa-798']).toBe('#871a2c');
  expect(pins['tuzsa-799']).toBe('#4274c7'); // 15-minute interval is allowed
  expect(pins['tuzsa-800']).toBe('#d94749'); // 16 minutes to the first bus
  expect(pins['tuzsa-801']).toBe('#4274c7'); // two different lines are not consecutive
@@ -346,3 +346,21 @@ test('red marks predicted gaps above 15 minutes even when the first bus arrives 
  await expect(page.locator('#busKpis')).toContainText('Stops with waits or gaps >15 min');
 });
 
+
+test('bus map uses dark red for waits or gaps strictly above 18 minutes',async({page})=>{
+ await setup(page);
+ const withArrivals={...latest,bus:{...latest.bus,stops:[
+  stop(798,18),
+  stop(799,19),
+  {...stop(800,3),arrivals:[{line:'23',minutes:3},{line:'23',minutes:40}]}
+ ]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(withArrivals)));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(3);
+ const pins=await page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
+ expect(pins['tuzsa-798']).toBe('#d94749');
+ expect(pins['tuzsa-799']).toBe('#871a2c');
+ expect(pins['tuzsa-800']).toBe('#871a2c');
+ await expect(page.locator('.bus-legend').filter({hasText:'Bus: wait or gap >18 min'})).toHaveCount(1);
+});
