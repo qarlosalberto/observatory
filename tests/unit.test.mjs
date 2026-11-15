@@ -483,6 +483,7 @@ import {readFileSync} from 'node:fs';
 
 
 test('specific route statuses and nested map-coverage labels are fully translated into Spanish',()=>{
+ assert.equal(translateText('1/1 stations reporting','es-ES'),'1/1 estaciones con datos');
  assert.equal(translateText('Line 35: loading published route…','es-ES'),'Línea 35: cargando el recorrido publicado…');
  assert.equal(translateText('Line 35: published itinerary · 2 segments. Connections between stops may be schematic.','es-ES'),
   'Línea 35: recorrido publicado · 2 tramos. Las conexiones entre paradas pueden ser esquemáticas.');
