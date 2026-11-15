@@ -3,7 +3,7 @@ import {analyzeBikeHistory} from './history-analysis.js';
 import {locale,translateText,initTranslations} from './i18n.js';
 initTranslations();
 const $=id=>document.getElementById(id);
-const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null,busLineFilter:'',busCatalogueLines:new Map()};
+const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null,busLineFilter:'',busCatalogueLines:new Map(),busRouteLayer:null,busRouteLine:''};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',darkRed:'#871a2c',blue:'#4274c7',grey:'#89929f'};
 const percent=(count,total)=>total>0?Math.round(100*count/total)+'%':'—';
 const countShare=(count,total)=>total>0?`${count} (${percent(count,total)})`:'—';
@@ -170,12 +170,35 @@ function updateBusLineSelector(){
  }
  renderBusLineMatches();
 }
+/** Display the published municipality street geometry, not fabricated lines between unordered stops. */
+function syncBusRouteOverlay(){
+ if(!state.map)return;
+ const line=$('showBus').checked?state.busLineFilter:'';
+ if(line===state.busRouteLine)return;
+ if(state.busRouteLayer){
+  state.map.removeLayer(state.busRouteLayer);
+  state.busRouteLayer=null;
+ }
+ state.busRouteLine=line;
+ $('busRouteNote').hidden=!line;
+ if(!line)return;
+ // The municipal GIS stores circular routes as "Ci1" etc., while the selector uses "CI1".
+ const gisLine=/^CI\d+$/.test(line)?'Ci'+line.slice(2):line;
+ // The identifier is normalized to letters and digits; it cannot inject a CQL expression.
+ const filter="rt_shrt_nm = '"+gisLine+"' AND version = 'ACTUAL'";
+ state.busRouteLayer=L.tileLayer.wms('https://idezar-sig.zaragoza.es/servicios/geoserver/movilidad/wms',{
+  layers:'movilidad:MU3_lineas_bus',styles:'',format:'image/png',transparent:true,version:'1.1.1',
+  CQL_FILTER:filter,opacity:.86,pane:'busRoutePane',maxZoom:19,
+  attribution:'Published bus route geometry: Ayuntamiento de Zaragoza · IDEZar'
+ }).addTo(state.map);
+}
 function setBusLineFilter(text){
  const line=normalizeBusLine(text);
  const valid=line&&availableBusLines().includes(line)?line:'';
  if(valid!==state.busLineFilter){
   state.map?.closePopup();
   state.busLineFilter=valid;
+  syncBusRouteOverlay();
   for(const [id,marker] of state.markers)removeBus(id,marker);
   busMarkers();
   if(state.liveMode)void loadVisibleBusETAs();
@@ -252,7 +275,7 @@ function refresh(force=false){
  if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}
  report();
 }
-function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
+function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='380';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
 function applyRecordedFrame(frame){
  state.liveMode=false;state.liveEpoch++;
  state.snapshotAt=frame?.at||null;
@@ -615,6 +638,7 @@ function selectView(view){
   $(view+'MapHost').append($('mapWorkspace'));
   $('mapTitle').textContent=view==='buses'?'Recorded bus stops and predictions':'Recorded Bizi stations';
   $('showBus').checked=view==='buses';$('showBizi').checked=view==='bizi';
+  syncBusRouteOverlay();
    $('repairFilter').hidden=view!=='bizi';
    for(const node of document.querySelectorAll('.bike-legend'))node.hidden=view!=='bizi';
    for(const node of document.querySelectorAll('.bus-legend'))node.hidden=view!=='buses';
@@ -670,7 +694,7 @@ $('clearBusLineFilter').addEventListener('click',()=>{$('busLineFilter').value='
 document.addEventListener('pointerdown',e=>{if(!e.target.closest('.bus-line-filter'))closeBusLineMenu()});
 $('refresh').addEventListener('click',()=>refresh(true));
 $('showBizi').addEventListener('change',()=>refresh(false));
-$('showBus').addEventListener('change',()=>refresh(false));
+$('showBus').addEventListener('change',()=>{syncBusRouteOverlay();refresh(false)});
 $('brokenOnly').addEventListener('change',()=>{if(!$('showBizi').checked)$('showBizi').checked=true;bikeMarkers();if(!state.stations.length)void loadBizi()});
 $('incidentRefresh').addEventListener('click',()=>void loadIncidents(true));
 for(const id of ['incidentType','incidentPhase','incidentSearch'])$(id).addEventListener(id==='incidentSearch'?'input':'change',renderIncidents);
