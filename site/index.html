@@ -47,7 +47,7 @@
   <section id="busesView" class="view hidden" role="tabpanel" aria-labelledby="tab-buses" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">PUBLIC TRANSPORT</p><h2>Bus network</h2><p>Predictions from sampled stops, captured at a stated time.</p></div><span class="section-pill">Recorded API data</span></div>
     <div id="busKpis" class="kpis"></div>
-    <div class="charts single-chart"><article class="chart-card"><h3>Predicted wait distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Predicted waiting times by route"></canvas></div><p id="busNote" class="note"></p></article></div>
+    <div class="charts single-chart"><article class="chart-card"><h3>Predicted wait distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Predicted waiting times by route"></canvas></div><p class="fineprint">The chart counts individual valid arrival predictions, not the intervals between buses. Map marker colours also account for those intervals.</p><p id="busNote" class="note"></p></article></div>
     <div class="section-divider"><span>BUS MAP</span><span>Select any visible stop to inspect routes</span></div>
     <div id="busesMapHost"></div>
     <p class="fineprint">A bus stop is dark red when the first announced bus on a route and destination is more than 18 minutes away, or when two successive announced buses on that same service are separated by more than 18 minutes. Standard red applies to waits or gaps over 15 minutes and up to 18. These are observed predictions, not evidence of timetable lateness.</p>
