@@ -10,7 +10,7 @@ const escapeRegex=s=>[...s].map(ch=>'.+*?^$()[]{}|\\'.includes(ch)?'\\'+ch:ch).j
 // Prefer detailed messages over broad fallbacks such as "Line {0}".
 // Otherwise partial English text survives inside Spanish translations.
 const compiled=templates.slice().sort((a,b)=>b[0].replace(/\{\d+\}/g,'').length-a[0].replace(/\{\d+\}/g,'').length).map(([source,target])=>({
- regex:new RegExp('^'+source.split(/(\{\d+\})/).map(p=>/^\{\d+\}$/.test(p)?'([\\s\\S]*?)':escapeRegex(p)).join('')+'$'),
+ regex:new RegExp('^'+source.trim().split(/(\{\d+\})/).map(p=>/^\{\d+\}$/.test(p)?'([\\s\\S]*?)':escapeRegex(p)).join('')+'$'),
  target
 }));
 export function translateText(value,selected=language,depth=0){
