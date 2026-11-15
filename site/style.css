@@ -150,7 +150,10 @@ footer strong{color:#344e67}
 .bike-broken{position:absolute;top:-10px;right:-17px;background:#f3c440;border:2px solid white;color:#513500;border-radius:12px;min-width:24px;padding:0 3px;height:24px;display:grid;place-items:center;font-size:11px;white-space:nowrap;box-shadow:0 1px 5px #2348}
 .leaflet-popup-content{font-size:13px;min-width:150px}
 .popup-line{margin-top:5px}
+.popup-line.wait-good{color:#187b53;font-weight:700}
+.popup-line.wait-ok{color:#3269b5;font-weight:700}
 .popup-line.over{color:#b32e35;font-weight:750}
+.popup-line.severe{color:#871a2c;font-weight:800}
 .popup-line.unknown{color:#778696}
 .leaflet-overlay-pane{pointer-events:none}
 .leaflet-overlay-pane .leaflet-interactive{pointer-events:auto}
