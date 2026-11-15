@@ -278,6 +278,34 @@ test.describe('Spanish (Spain) browser localization',()=>{
   await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.charts.historyBiziChart?.data.datasets[0]?.label)).toBe('Con menos de 2 bicis');
   expect(calls).toEqual([]);
  });
+ test('translates selected-line route geometry, map coverage and reset with no English remnants',async({page})=>{
+  await setup(page);
+  await page.locator('[data-view="buses"]').click();
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Todas las líneas)');
+  await expect(page.locator('#busMapCoverage')).toContainText('sin consultar');
+  await page.locator('#busLineFilter').fill('23');
+  await expect(page.locator('#busLineFilterStatus')).toContainText('paradas conocidas de la línea 23');
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Línea 23)');
+  await expect(page.locator('#busRouteStatus')).toContainText('Línea 23: recorrido publicado');
+  await expect(page.locator('#busRouteStatus')).not.toContainText(/published itinerary|loading published|Connections between stops/);
+  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+  await page.locator('#clearBusLineFilter').click();
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Todas las líneas)');
+  await expect(page.locator('#busRouteStatus')).toBeHidden();
+  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ });
+ test('first page, history cadence and visible labels remain Spanish after data loads',async({page})=>{
+  await setup(page);
+  await expect(page.locator('#overviewView')).not.toContainText(/Available bikes|Out-of-service bikes|Stop-level arrival estimates|stations reporting|Sampled stop coverage/);
+  await expect(page.locator('#status')).toContainText('Observaciones registradas');
+  await expect(page.locator('#status')).not.toContainText('Recorded observations only');
+  await page.locator('[data-view="history"]').click();
+  await expect(page.locator('#historyView')).toContainText('Objetivo: una captura aproximadamente cada hora');
+  await expect(page.locator('#historyView')).not.toContainText('30-minute capture target');
+  await page.locator('[data-view="method"]').click();
+  await expect(page.locator('#methodView')).toContainText('aproximadamente una captura por hora');
+  await expect(page.locator('#methodView')).not.toContainText('one capture every 30 minutes');
+ });
  test('translates the long bus-to-bus gap shown on a red map marker',async({page})=>{
   await setup(page);
   const withArrivals={...latest,bus:{...latest.bus,stops:[{...stop(798,3),arrivals:[
