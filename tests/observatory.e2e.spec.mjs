@@ -23,6 +23,10 @@ async function setup(page){
  await page.route('https://unpkg.com/leaflet@1.9.4/dist/leaflet.js',r=>r.fulfill({path:leafletJs,contentType:'application/javascript'}));
  await page.route('https://unpkg.com/leaflet@1.9.4/dist/leaflet.css',r=>r.fulfill({path:leafletCss,contentType:'text/css'}));
  await page.route('https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js',r=>r.fulfill({path:chartJs,contentType:'application/javascript'}));
+ await page.route('**/history/routes/*.json*',r=>r.fulfill({status:404,contentType:'application/json',body:'{}'}));
+ await page.route(/\/transporte-urbano\/linea(?:-autobus)?\/[^/]+\.json/,r=>r.fulfill(response({
+  type:'Feature',geometry:{type:'LineString',coordinates:[[-.8891,41.6488],[-.8881,41.6498],[-.8871,41.6508]]}
+ })));
  await page.route('**/history/latest.json*',r=>r.fulfill(response(latest)));
  await page.route('**/history/timeline.json*',r=>r.fulfill(response({schema:1,frames:[older,latest]})));
  await page.route('**/history/incidents.json*',r=>r.fulfill(response({fetchedAt:after,totalCount:3,items:notices})));
@@ -661,4 +665,80 @@ test('selected bus line draws a verified ordered path and All lines/Bizi clear e
  expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteWmsLayer)).toBeNull();
  await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+});
+
+test('selected line draws a published route underneath bus pins; all lines removes it',async({page})=>{
+ await setup(page);
+ const custom={...latest,bus:{...latest.bus,stops:[
+  {...stop(798,3),name:'(798) Avenida Líneas: 23, 24',arrivals:[{line:'23',minutes:3},{line:'24',minutes:30}]},
+  {...stop(799,7),name:'(799) Calle Líneas: 23',arrivals:[{line:'23',minutes:7}]}
+ ],catalog:[
+  {id:'tuzsa-798',name:'(798) Avenida Líneas: 23, 24',coords:stop(798,0).coords},
+  {id:'tuzsa-799',name:'(799) Calle Líneas: 23',coords:stop(799,0).coords}
+ ]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(custom)));
+ await page.route('**/history/routes/23.json*',r=>r.fulfill(response({
+  schema:1,line:'23',paths:[[[41.6488,-.8891],[41.6498,-.8881]],[[41.6518,-.8871],[41.6528,-.8861]]]
+ })));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ await expect(page.locator('#busRouteStatus')).toBeHidden();
+ await page.locator('#busLineFilter').fill('23');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(2);
+ const paths=await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().map(layer=>({
+  points:layer.getLatLngs().map(p=>[p.lat,p.lng]),
+  pane:layer.options.pane,interactive:layer.options.interactive
+ })));
+ expect(paths).toEqual([
+  {points:[[41.6488,-.8891],[41.6498,-.8881]],pane:'busRoutePane',interactive:false},
+  {points:[[41.6518,-.8871],[41.6528,-.8861]],pane:'busRoutePane',interactive:false}
+ ]);
+ await expect(page.locator('#busRouteStatus')).toContainText('published itinerary');
+ expect(await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798')?.ring.options.fillColor)).toBe('#4274c7');
+ await page.locator('[data-view="bizi"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ await expect(page.locator('#busRouteStatus')).toBeHidden();
+ await page.locator('[data-view="buses"]').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(2);
+ await page.locator('#clearBusLineFilter').click();
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ await expect(page.locator('#busRouteStatus')).toBeHidden();
+ await expect(page.locator('#busLineFilter')).toHaveValue('');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
+});
+
+test('switching lines or clearing filter ignores late published route responses',async({page})=>{
+ await setup(page);
+ const custom={...latest,bus:{...latest.bus,stops:[{...stop(798,3),name:'(798) Líneas: 23, 24',arrivals:[{line:'23',minutes:3},{line:'24',minutes:8}]}]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(custom)));
+ await page.route('**/history/routes/23.json*',async r=>{
+  await new Promise(resolve=>setTimeout(resolve,450));
+  await r.fulfill(response({schema:1,line:'23',paths:[[[41.6488,-.8891],[41.6498,-.8881]]]}));
+ });
+ await page.route('**/history/routes/24.json*',r=>r.fulfill(response({schema:1,line:'24',paths:[[[41.6488,-.8891],[41.6508,-.8861]]]})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('23');
+ await page.locator('#busLineFilter').fill('24');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(1);
+ let points=await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers()[0].getLatLngs().map(p=>[p.lat,p.lng]));
+ expect(points[1]).toEqual([41.6508,-.8861]);
+ await page.locator('#clearBusLineFilter').click();
+ await page.waitForTimeout(520);
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ await expect(page.locator('#busRouteStatus')).toBeHidden();
+});
+
+test('bus route is not fabricated when municipal route data is unavailable',async({page})=>{
+ await setup(page);
+ const custom={...latest,bus:{...latest.bus,stops:[{...stop(798,3),name:'(798) Líneas: 23',arrivals:[{line:'23',minutes:3}]}]}};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response(custom)));
+ await page.route(/\/transporte-urbano\/linea(?:-autobus)?\/[^/]+\.json/,r=>r.fulfill({status:404,body:'{}'}));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ await page.locator('#busLineFilter').fill('23');
+ await expect(page.locator('#busRouteStatus')).toContainText('no verified route geometry available');
+ expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
+ expect(await page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
 });
