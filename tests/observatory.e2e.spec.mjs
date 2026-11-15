@@ -425,8 +425,13 @@ test('searchable line selector lists catalogue routes and filters bus pins and s
  await page.reload();
  await page.locator('[data-view="buses"]').click();
  await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(6);
- const allOptions=await page.locator('#busLineOptions option').evaluateAll(items=>items.map(x=>x.value));
+ await page.locator('#busLineToggle').click();
+ await expect(page.locator('#busLineMatches')).toBeVisible();
+ const allOptions=await page.locator('#busLineMatches [role="option"]').allTextContents();
  expect(allOptions).toEqual(['23','24','31','N3']);
+ await page.locator('#busLineMatches [role="option"]').filter({hasText:'23'}).click();
+ await expect(page.locator('#busLineMatches')).toBeHidden();
+ await expect(page.locator('#busLineFilter')).toHaveValue('23');
  const pinColors=()=>page.evaluate(()=>Object.fromEntries([...window.__observatoryTest.state.markers].map(([id,m])=>[id,m.ring.options.fillColor])));
  expect((await pinColors())['tuzsa-798']).toBe('#871a2c'); // Unfiltered: line 24 has a 38-minute gap.
  await page.locator('#busLineFilter').fill('23');
@@ -499,4 +504,44 @@ test.describe('Spanish searchable bus line selector',()=>{
   await expect(page.locator('.leaflet-popup-content')).toContainText('Línea 23');
   await expect(page.locator('.leaflet-popup-content')).not.toContainText('Línea 24:');
  });
+});
+
+test('searchable bus-line dropdown includes special EM3 service and supports Enter and arrows',async({page})=>{
+ await setup(page);
+ const bus={...latest.bus,sampled:2,stops:[
+  {...stop(798,2),name:'(798) Avenida Líneas: 23',arrivals:[{line:'23',minutes:2}]},
+  {...stop(799,20),name:'(799) Shuttle Líneas: EM3',arrivals:[{line:'EM3',minutes:20}]}
+ ],catalog:[
+  {id:'tuzsa-798',name:'(798) Avenida Líneas: 23',coords:stop(798,0).coords},
+  {id:'tuzsa-799',name:'(799) Shuttle Líneas: EM3',coords:stop(799,0).coords}
+ ]};
+ await page.route('**/history/latest.json*',r=>r.fulfill(response({...latest,bus})));
+ await page.reload();
+ await page.locator('[data-view="buses"]').click();
+ const input=page.locator('#busLineFilter');
+ await input.click();
+ await expect(input).toHaveAttribute('aria-expanded','true');
+ await expect(page.locator('#busLineMatches [role="option"]')).toHaveCount(2);
+ await input.fill('em');
+ await expect(page.locator('#busLineMatches [role="option"]')).toHaveCount(1);
+ await expect(page.locator('#busLineMatches')).toContainText('EM3');
+ await input.press('Enter');
+ await expect(page.locator('#busLineMatches')).toBeHidden();
+ await expect(input).toHaveValue('EM3');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.busLineFilter)).toBe('EM3');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
+ const chosen=await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-799')?.ring.options.fillColor);
+ expect(chosen).toBe('#871a2c');
+ await page.locator('#busLineToggle').click();
+ await expect(page.locator('#busLineMatches [role="option"]')).toHaveCount(2);
+ await input.press('ArrowDown');
+ await input.press('Enter');
+ await expect(input).toHaveValue('EM3');
+ await expect(page.locator('#busLineMatches')).toBeHidden();
+ await input.fill('not a real route');
+ await expect(page.locator('#busLineMatches')).toContainText('No matching bus lines');
+ await page.locator('#clearBusLineFilter').click();
+ await expect(page.locator('#busLineMatches')).toBeHidden();
+ await expect(input).toHaveValue('');
+ await expect.poll(()=>page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(2);
 });
