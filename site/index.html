@@ -47,7 +47,7 @@
   <section id="busesView" class="view hidden" role="tabpanel" aria-labelledby="tab-buses" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">PUBLIC TRANSPORT</p><h2>Bus network</h2><p>Predictions from sampled stops, captured at a stated time.</p></div><span class="section-pill">Recorded API data</span></div>
     <div id="busKpis" class="kpis"></div>
-    <div class="charts single-chart"><article class="chart-card"><h3>Predicted wait distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Predicted waiting times by route"></canvas></div><p class="fineprint">The chart counts individual valid arrival predictions, not the intervals between buses. Map marker colours also account for those intervals.</p><p id="busNote" class="note"></p></article></div>
+    <div class="charts single-chart"><article class="chart-card"><h3>Inter-bus interval distribution</h3><div class="chart-wrap"><canvas id="busChart" aria-label="Intervals between successive predicted buses on the same route and direction"></canvas></div><p class="fineprint">Each interval is the difference between two successive predicted arrival times for the same line and destination (e.g. 5, 20, 23 min → intervals of 15 and 3 min). The wait until the first bus is shown separately and is not counted as an interval. No pair means insufficient data.</p><p id="busNote" class="note"></p></article></div>
     <div class="section-divider"><span>BUS MAP</span><span>Select any visible stop to inspect routes</span></div>
     <div class="bus-line-filter">
       <label for="busLineFilter">Filter map by bus line</label>
@@ -64,7 +64,7 @@
     </div>
     <div id="busesMapHost"></div>
     <p id="busMapCoverage" class="fineprint" role="status" aria-live="polite">Bus map: awaiting observed stop coverage.</p>
-    <p class="fineprint">A bus stop is dark red when the first announced bus on a route and destination is more than 18 minutes away, or when two successive announced buses on that same service are separated by more than 18 minutes. Standard red applies to waits or gaps of 15 to 18 minutes, inclusive. These are observed predictions, not evidence of timetable lateness.</p>
+    <p class="fineprint">Bus stop colours depend exclusively on differences between successive predicted buses of the same line and destination: dark red for intervals over 18 minutes, red for 15–18 minutes, and blue for intervals below 15 minutes. Grey means no comparable pair (including only one prediction or no data). The wait until the first bus is separate and does not determine the colour. Predictions are not proof of timetable lateness.</p>
   </section>
   <section id="biziView" class="view hidden" role="tabpanel" aria-labelledby="tab-bizi" tabindex="0">
     <div class="panel-heading"><div><p class="section-kicker">SHARED MOBILITY</p><h2>Bizi stations</h2><p>Available bikes, empty stations and reported out-of-service units.</p></div><span class="section-pill">Recorded API data</span></div>
@@ -94,7 +94,7 @@
         <button type="button" id="liveButton" class="timeline-live">Fetch live data <span aria-hidden="true">↗</span></button>
       </div>
     </div>
-    <div class="legend"><span class="bike-legend"><i style="--c:#13865d"></i>Bizi: 5+ bikes</span><span class="bike-legend"><i style="--c:#f1aa41"></i>Bizi: 1–4 bikes</span><span class="bike-legend"><i style="--c:#e25c61"></i>Empty Bizi</span><span class="bike-legend"><i style="--c:#89929f"></i>Unknown Bizi</span><span class="bus-legend"><i style="--c:#5188e2"></i>Bus: no wait/gap ≥15 min detected</span><span class="bus-legend"><i style="--c:#d94749"></i>Bus: wait or gap ≥15 and ≤18 min</span><span class="bus-legend"><i style="--c:#871a2c"></i>Bus: wait or gap &gt;18 min</span><span class="bus-legend"><i style="--c:#89929f"></i>Bus stop · no verified prediction</span></div>
+    <div class="legend"><span class="bike-legend"><i style="--c:#13865d"></i>Bizi: 5+ bikes</span><span class="bike-legend"><i style="--c:#f1aa41"></i>Bizi: 1–4 bikes</span><span class="bike-legend"><i style="--c:#e25c61"></i>Empty Bizi</span><span class="bike-legend"><i style="--c:#89929f"></i>Unknown Bizi</span><span class="bus-legend"><i style="--c:#5188e2"></i>Bus: measured intervals <15 min</span><span class="bus-legend"><i style="--c:#d94749"></i>Bus: interval ≥15 and ≤18 min</span><span class="bus-legend"><i style="--c:#871a2c"></i>Bus: interval &gt;18 min</span><span class="bus-legend"><i style="--c:#89929f"></i>Bus stop · no comparable consecutive buses</span></div>
     <p id="status" role="status" aria-live="polite" class="status">Loading the latest recorded snapshot…</p>
   </div>
   <section id="incidentsView" class="view hidden" role="tabpanel" aria-labelledby="tab-incidents" tabindex="0">
