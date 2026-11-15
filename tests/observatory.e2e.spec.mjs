@@ -738,7 +738,7 @@ test('bus route is not fabricated when municipal route data is unavailable',asyn
  await page.reload();
  await page.locator('[data-view="buses"]').click();
  await page.locator('#busLineFilter').fill('23');
- await expect(page.locator('#busRouteStatus')).toContainText('no verified route geometry available');
+ await expect(page.locator('#busRouteStatus')).toContainText('municipal street-route overlay selected');
  expect(await page.evaluate(()=>window.__observatoryTest.state.busRouteLayer.getLayers().length)).toBe(0);
  expect(await page.evaluate(()=>window.__observatoryTest.state.markers.size)).toBe(1);
 });
