@@ -244,7 +244,7 @@ test('transient Avanza errors are retried, permanent HTTP errors are not',async(
  assert.equal(attempts,1);
 });
 
-import {BUS_GAP_THRESHOLD,BUS_DARK_RED_WAIT_THRESHOLD,analyzeBusRegularity} from '../site/data.js';
+import {BUS_GAP_THRESHOLD,BUS_DARK_RED_WAIT_THRESHOLD,analyzeBusRegularity,busLinesOf,normalizeBusLine,arrivalsForLine} from '../site/data.js';
 
 test('bus stop turns red for 37-minute interval even with a first bus in three minutes',()=>{
  const value=analyzeBusRegularity([
@@ -343,4 +343,37 @@ test('predicted waiting-time histogram has exclusive red and dark-red buckets',(
  assert.equal(noData.estimates,0);
  assert.equal(noData.darkRedWaits,0);
  assert.equal(noData.withETA,0);
+});
+
+test('catalogue route metadata enumerates lines even without predicted arrivals',()=>{
+ const stop={id:'tuzsa-7',name:'(7) León Moyano Líneas: 23, N5, 31, Ci4',arrivals:[]};
+ assert.deepEqual(busLinesOf(stop),['23','N5','31','CI4']);
+ assert.deepEqual(busLinesOf({id:'tuzsa-9',name:'Stop 9',arrivals:[]}),[]);
+ assert.deepEqual(busLinesOf({name:'Líneas: TRA, ESP'}),['TRA','ESP']);
+ assert.deepEqual(busLinesOf({name:'(5) Líneas: '}),[]);
+ assert.equal(normalizeBusLine('  ci4 '),'CI4');
+ assert.equal(normalizeBusLine('039'),'39');
+ assert.equal(normalizeBusLine('Unknown route 9'),'');
+});
+
+test('catalogue route names and verified route observations are merged without guessing other lines',()=>{
+ const st={name:'(2) Mago de Oz Líneas: TRA',arrivals:[{line:'21',minutes:1},{line:'53',minutes:11}]};
+ assert.deepEqual(busLinesOf(st),['TRA','21','53']);
+ assert.deepEqual(busLinesOf({name:'(99) Street',arrivals:[{line:'N3',minutes:null}]}),['N3']);
+ assert.deepEqual(busLinesOf({name:'(23) Stop',arrivals:[]}),[]);
+});
+
+test('filtered bus arrivals retain only matching lines with separate headway calculations',()=>{
+ const rows=[
+  {line:'23',minutes:3,destination:'CENTRO'},
+  {line:'23',minutes:9,destination:'CENTRO'},
+  {line:'24',minutes:2,destination:'SUR'},
+  {line:'24',minutes:40,destination:'SUR'},
+  {line:'N3',minutes:null}
+ ];
+ assert.deepEqual(arrivalsForLine(rows,'23').map(x=>x.minutes),[3,9]);
+ assert.equal(analyzeBusRegularity(arrivalsForLine(rows,'23')).darkRed,false);
+ assert.equal(analyzeBusRegularity(arrivalsForLine(rows,'24')).darkRed,true);
+ assert.deepEqual(arrivalsForLine(rows,'n3').map(x=>x.minutes),[null]);
+ assert.equal(arrivalsForLine(rows,'').length,5);
 });
