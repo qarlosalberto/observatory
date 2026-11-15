@@ -50,6 +50,7 @@ export function summarizeBikes(stations){
  return {total:stations.length,known:known.length,empty:known.filter(s=>s.available===0).length,underTwo:known.filter(s=>s.available<2).length,underFive:known.filter(s=>s.available<=BIZI_LOW_MAX).length,low:known.filter(s=>s.available>0&&s.available<=BIZI_LOW_MAX).length,good:known.filter(s=>s.available>BIZI_LOW_MAX).length,available:known.reduce((n,s)=>n+s.available,0),faultStations:stations.filter(s=>s.disabled!==null&&s.disabled>0).length,faultKnown:stations.filter(s=>s.disabled!==null).length,faultTotal:stations.filter(s=>s.disabled!==null).reduce((n,s)=>n+s.disabled,0),pairedStations:pairs.length,pairedAvailable:pairs.reduce((n,s)=>n+s.available,0),pairedFaults:pairs.reduce((n,s)=>n+s.disabled,0)};
 }
 export const BUS_GAP_THRESHOLD=15;
+export const BUS_DARK_RED_WAIT_THRESHOLD=18;
 
 /**
  * Compare successive predictions only within the same route and destination.
@@ -88,6 +89,7 @@ export function analyzeBusRegularity(arrivals=[]){
   hasArrivals:routes.length>0,
   slowFirst:routes.some(r=>r.slowFirst),
   longGap:routes.some(r=>r.longGap),
+  darkRed:routes.some(r=>r.first>BUS_DARK_RED_WAIT_THRESHOLD),
   red:routes.some(r=>r.slowFirst||r.longGap),
   comparedGaps:routes.reduce((sum,r)=>sum+r.gaps.length,0)
  };
