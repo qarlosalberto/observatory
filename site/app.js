@@ -1,9 +1,9 @@
-import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX,BUS_GAP_THRESHOLD,analyzeBusRegularity,normalizeBusLine,busLinesOf,arrivalsForLine} from './data.js';
+import {BUS_API,BIZI_GBFS,BIZI_FALLBACK,asItems,coordsOf,stopId,parseBusLines,summarizeBikes,summarizeBuses,INCIDENT_API,normalizeIncidents,incidentPhase,incidentTypes,stationName,BIZI_LOW_MAX,BUS_GAP_THRESHOLD,analyzeBusRegularity,normalizeBusLine,busLinesOf,arrivalsForLine,BUS_LINE_ROUTE_API,busRoutePaths} from './data.js';
 import {analyzeBikeHistory} from './history-analysis.js';
 import {locale,translateText,initTranslations} from './i18n.js';
 initTranslations();
 const $=id=>document.getElementById(id);
-const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null,busLineFilter:'',busCatalogueLines:new Map(),busRouteLayer:null,busRouteLine:''};
+const state={stations:[],stops:[],busFetched:0,bikeFetched:0,bikeSource:'',busError:'',bikeError:'',busLoading:false,busReloadRequested:false,map:null,bl:null,sl:null,markers:new Map(),charts:{},incidents:[],incidentFetched:0,incidentSource:'',incidentTotal:0,incidentError:'',incidentLoading:false,incidentMap:null,incidentLayer:null,incidentMapFitted:false,liveMode:false,liveEpoch:0,latest:null,timeline:null,selectedFrameIndex:null,timelineLoading:false,snapshotBusPopulation:0,snapshotBusSampled:0,snapshotAt:null,snapshotBusAt:null,snapshotBiziAt:null,busLineFilter:'',busCatalogueLines:new Map(),busRouteLayer:null,busRouteRequest:0,busRouteCache:new Map(),busRoutePending:new Map(),busRouteLayer:null,busRouteLine:''};
 const color={green:'#18875b',yellow:'#e9a52f',red:'#d94749',darkRed:'#871a2c',blue:'#4274c7',grey:'#89929f'};
 const percent=(count,total)=>total>0?Math.round(100*count/total)+'%':'—';
 const countShare=(count,total)=>total>0?`${count} (${percent(count,total)})`:'—';
@@ -201,10 +201,63 @@ function setBusLineFilter(text){
   syncBusRouteOverlay();
   for(const [id,marker] of state.markers)removeBus(id,marker);
   busMarkers();
+  void renderBusRoute();
   if(state.liveMode)void loadVisibleBusETAs();
  }
  updateBusLineSelector();
 }
+
+function clearBusRoute(){
+ state.busRouteRequest++;
+ state.busRouteLayer?.clearLayers();
+ $('busRouteStatus').hidden=true;
+ $('busRouteStatus').textContent='';
+}
+async function getPublishedBusRoute(line){
+ if(state.busRouteCache.has(line))return state.busRouteCache.get(line);
+ if(state.busRoutePending.has(line))return state.busRoutePending.get(line);
+ const pending=(async()=>{
+  // The municipality documents both endpoint spellings for line itineraries.
+  // Neither the generic stop catalogue nor stop IDs establishes travel order.
+  for(const endpoint of ['linea','linea-autobus']){
+   try{
+    const reply=await getJson(BUS_LINE_ROUTE_API+'/'+endpoint+'/'+encodeURIComponent(line)+'.json?srsname=wgs84');
+    const paths=busRoutePaths(reply);
+    if(paths.length){
+     state.busRouteCache.set(line,paths);
+     return paths;
+    }
+   }catch{
+    // A provider error is not permission to draw guessed connections.
+   }
+  }
+  return [];
+ })();
+ state.busRoutePending.set(line,pending);
+ try{return await pending}finally{state.busRoutePending.delete(line)}
+}
+async function renderBusRoute(){
+ const request=++state.busRouteRequest,line=state.busLineFilter,visible=$('showBus').checked;
+ state.busRouteLayer?.clearLayers();
+ const label=$('busRouteStatus');
+ if(!visible||!line){
+  label.hidden=true;label.textContent='';return;
+ }
+ label.hidden=false;
+ label.textContent=translateText('Line '+line+': loading published route…');
+ const paths=await getPublishedBusRoute(line);
+ if(request!==state.busRouteRequest||line!==state.busLineFilter||!$('showBus').checked)return;
+ if(!paths.length){
+  label.textContent=translateText('Line '+line+': no verified route geometry available. Stops remain filtered.');
+  return;
+ }
+ for(const points of paths){
+  L.polyline(points,{pane:'busRoutePane',color:'#087998',weight:5,opacity:.85,
+   lineJoin:'round',lineCap:'round',interactive:false}).addTo(state.busRouteLayer);
+ }
+ label.textContent=translateText('Line '+line+': published itinerary · '+paths.length+' segments. Connections between stops may be schematic.');
+}
+
 function removeBus(id,marker){marker.ring.closePopup();state.sl.removeLayer(marker.ring);state.markers.delete(id)}
 function busMarkers(){
  if(!state.map)return;
@@ -275,7 +328,7 @@ function refresh(force=false){
  if($('showBus').checked)void loadStops(force);else {for(const [id,m] of state.markers)removeBus(id,m)}
  report();
 }
-function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='380';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
+function initMap(){state.map=L.map('map',{zoomControl:false}).setView([41.6488,-0.8891],14);L.control.zoom({position:'bottomright'}).addTo(state.map);L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',{attribution:'© OpenStreetMap contributors',maxZoom:19}).addTo(state.map);state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='380';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busRoutePane');state.map.getPane('busRoutePane').style.zIndex='385';state.map.getPane('busRoutePane').style.pointerEvents='none';state.map.createPane('busPane');state.map.getPane('busPane').style.zIndex='390';state.busRouteLayer=L.layerGroup().addTo(state.map);state.bl=L.layerGroup().addTo(state.map);state.sl=L.layerGroup().addTo(state.map);state.map.on('moveend',()=>{busMarkers();void loadVisibleBusETAs()})}
 function applyRecordedFrame(frame){
  state.liveMode=false;state.liveEpoch++;
  state.snapshotAt=frame?.at||null;
@@ -644,6 +697,7 @@ function selectView(view){
    for(const node of document.querySelectorAll('.bus-legend'))node.hidden=view!=='buses';
   $('brokenOnly').checked=false;
   if(state.liveMode)refresh(false);else {bikeMarkers();busMarkers();report()}
+  void renderBusRoute();
   requestAnimationFrame(()=>{state.map?.invalidateSize();bikeMarkers();busMarkers();for(const chart of Object.values(state.charts))chart.resize()});
  }else if(view==='incidents'){
   void loadIncidents();
