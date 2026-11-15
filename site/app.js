@@ -206,18 +206,26 @@ function setBusLineFilter(text){
  updateBusLineSelector();
 }
 
-function clearBusRoute(){
- state.busRouteRequest++;
- state.busRouteLayer?.clearLayers();
- $('busRouteStatus').hidden=true;
- $('busRouteStatus').textContent='';
-}
 async function getPublishedBusRoute(line){
  if(state.busRouteCache.has(line))return state.busRouteCache.get(line);
  if(state.busRoutePending.has(line))return state.busRoutePending.get(line);
  const pending=(async()=>{
-  // The municipality documents both endpoint spellings for line itineraries.
-  // Neither the generic stop catalogue nor stop IDs establishes travel order.
+  // Prefer individually cached municipal line itineraries (no browser CORS dependency).
+  try{
+   const saved=await getJson('./history/routes/'+encodeURIComponent(line)+'.json');
+   const paths=saved?.schema===1&&saved.line===line&&Array.isArray(saved.paths)
+    ?saved.paths.filter(path=>Array.isArray(path)&&path.length>=2&&path.length<20000&&path.every(
+      point=>Array.isArray(point)&&point.length===2&&Number.isFinite(point[0])&&Number.isFinite(point[1])&&
+      point[0]>=41.2&&point[0]<=42.2&&point[1]>=-1.5&&point[1]<=-.3))
+    :[];
+   if(paths.length){
+    state.busRouteCache.set(line,paths);
+    return paths;
+   }
+  }catch{
+   // First deployment or missing cached line: use documented municipal API.
+  }
+  // Never connect the unsorted stop catalogue; only published line itineraries.
   for(const endpoint of ['linea','linea-autobus']){
    try{
     const reply=await getJson(BUS_LINE_ROUTE_API+'/'+endpoint+'/'+encodeURIComponent(line)+'.json?srsname=wgs84');
