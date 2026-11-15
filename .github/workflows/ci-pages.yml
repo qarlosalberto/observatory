@@ -2,6 +2,10 @@ name: Observatory · Test & deploy
 on:
   push:
     branches: [main]
+    # Snapshot-only commits are already published by the history workflow.
+    # Avoid a second full browser-test/deploy cycle for each hourly capture.
+    paths-ignore:
+      - 'site/history/**'
   pull_request:
     branches: [main]
   workflow_dispatch:
