@@ -461,6 +461,33 @@ test('predicted wait chart separates 16–18 from >18 minutes using map colours'
  await expect(page.locator('#busesView')).toContainText('not the intervals between buses');
 });
 
+test.describe('Complete Spanish bus tab',()=>{
+ test.use({locale:'es-ES'});
+ test('localizes bus KPIs, filter, map controls, prediction popup and source attribution',async({page})=>{
+  await setup(page);
+  await page.locator('[data-view="buses"]').click();
+  await expect(page.locator('#busesView')).toContainText('Red de autobuses');
+  await expect(page.locator('#busKpis')).toContainText('Estimaciones de llegada por parada');
+  await expect(page.locator('#busKpis')).toContainText('Consultas a la API sin predicción');
+  await expect(page.locator('#busKpis')).not.toContainText(/Stop-level arrival|Predicted waits|API requests without|Known predictions|One vehicle can appear|Dark red:|Red: 15/);
+  await expect(page.locator('#busLineFilter')).toHaveAttribute('placeholder','Todas las líneas · escribe o selecciona una línea');
+  await expect(page.locator('#clearBusLineFilter')).toHaveText('Todas las líneas');
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Todas las líneas)');
+  await expect(page.locator('#mapTitle')).toHaveText('Paradas y predicciones de autobuses registradas');
+  await expect(page.locator('.leaflet-control-zoom-in')).toHaveAttribute('aria-label','Acercar');
+  await expect(page.locator('.leaflet-control-zoom-out')).toHaveAttribute('aria-label','Alejar');
+  await page.evaluate(()=>window.__observatoryTest.state.markers.get('tuzsa-798').ring.openPopup());
+  await expect(page.locator('.leaflet-popup-content')).toContainText('Parada');
+  await expect(page.locator('.leaflet-popup-close-button')).toHaveAttribute('aria-label','Cerrar ventana de información');
+  await page.locator('#busLineFilter').fill('23');
+  await expect(page.locator('#busRouteStatus')).toContainText('Línea 23: recorrido publicado');
+  await expect(page.locator('#busRouteStatus')).not.toContainText(/published itinerary|loading published|Connections between stops/);
+  await expect(page.locator('#busMapCoverage')).toContainText('Cobertura del mapa (Línea 23)');
+  await page.locator('#clearBusLineFilter').click();
+  await expect(page.locator('#busRouteStatus')).toBeHidden();
+ });
+});
+
 test.describe('Spanish bus-wait chart categories',()=>{
  test.use({locale:'es-ES'});
  test('new dark-red category and explanatory note are translated',async({page})=>{
